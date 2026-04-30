@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  .pref-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 10px 12px;
+    align-items: start;
+  }
+
+  .pref-note {
+    grid-column: 2;
+    margin-top: -6px;
+  }
+
+  .callout {
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .button-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  button.primary {
+    background: #f5f5f5;
+    color: #111;
+  }
+
+  button.secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+  }
+
+  input[type="text"] {
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+  <div class="pref-section">
+    <h3>Trakt</h3>
+    <div class="pref-grid">
+      <label>Actions</label>
+      <div class="button-row">
+        <button id="connect-button" class="primary" type="button">Connect to Trakt</button>
+        <button id="signout-button" class="secondary" type="button">Sign Out</button>
+      </div>
+      <div></div>
+      <p class="small secondary pref-help pref-note">
+        Clicking Connect opens the browser flow and brings the Trakt sidebar into view so the device code, connected account, token validity, playback identity, and last scrobble status are visible there immediately.
+      </p>
+
+      <label for="trakt-client-id">Dev Override Client ID</label>
+      <input id="trakt-client-id" type="text" data-pref-key="trakt_client_id" placeholder="Optional local override" />
+      <div></div>
+      <p class="small secondary pref-help pref-note">
+        Leave this blank in normal use. This is only for local development if bundled credentials are not embedded into the build.
+      </p>
+
+      <label for="trakt-client-secret">Dev Override Client Secret</label>
+      <input id="trakt-client-secret" type="text" data-pref-key="trakt_client_secret" placeholder="Optional local override" />
+      <div></div>
+      <p class="small secondary pref-help pref-note">
+        Access tokens are stored in the macOS keychain when possible, with an @data fallback during development.
+      </p>
+    </div>
+  </div>
+
+  <div class="pref-section">
+    <h3>Scrobbling</h3>
+    <div class="pref-grid">
+      <label>
+        <input type="checkbox" data-type="bool" data-pref-key="scrobble_enabled" />
+        Enable scrobbling
+      </label>
+      <div></div>
+
+      <label>
+        <input type="checkbox" data-type="bool" data-pref-key="debug_osd" />
+        Show debug OSD
+      </label>
+      <div></div>
+    </div>
+  </div>
+
+  <div class="pref-section">
+    <p class="small secondary">
+      Current behavior: parse media with guessit, map it to Trakt, authenticate with the device flow, and send start, pause, and stop scrobbles with preview and fast-pause guards inspired by the Python reference implementation.
+    </p>
+  </div>
+
+  <script>
+    (function() {
+      var prefApi = window.iina && iina.preferences ? iina.preferences : null;
+
+      function writePref(key, value) {
+        if (!prefApi || typeof prefApi.set !== "function") return;
+        try {
+          prefApi.set(key, value);
+        } catch (_error) {}
+      }
+
+      function syncPrefStore() {
+        if (!prefApi || typeof prefApi.sync !== "function") return;
+        try {
+          prefApi.sync();
+        } catch (_error) {}
+      }
+
+      function requestAction(kind) {
+        writePref("auth_action_kind", kind);
+        writePref("auth_action_nonce", String(Date.now()));
+        syncPrefStore();
+      }
+
+      document.getElementById("connect-button").addEventListener("click", function() {
+        requestAction("connect");
+      });
+
+      document.getElementById("signout-button").addEventListener("click", function() {
+        requestAction("signout");
+      });
+    })();
+  </script>
+</body>
+</html>
