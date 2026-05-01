@@ -61,6 +61,8 @@
   }
 
   .shell {
+    display: flex;
+    flex-direction: column;
     min-height: 100vh;
     padding: 8px 0 12px;
   }
@@ -82,9 +84,7 @@
   }
 
   .brand-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    display: block;
     width: 18px;
     height: 18px;
     flex: 0 0 auto;
@@ -182,6 +182,17 @@
     font-weight: 700;
     line-height: 1.2;
     letter-spacing: -0.01em;
+  }
+
+  .title[data-tone="soft"] {
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .title em {
+    font-style: italic;
+    font-weight: inherit;
   }
 
   .caption {
@@ -405,6 +416,25 @@
     transform: translateY(0);
   }
 
+  .provider {
+    margin: auto 7px 0;
+    padding: 14px 1px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--tertiary);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .provider-logo {
+    display: block;
+    height: 12px;
+    width: auto;
+    opacity: 0.9;
+  }
+
   button {
     min-height: 28px;
     padding: 0 11px;
@@ -496,12 +526,7 @@
   <div class="shell">
     <header class="header">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 18 18" width="18" height="18" role="presentation">
-            <rect x="0.75" y="0.75" width="16.5" height="16.5" rx="4" fill="#ed1c24"></rect>
-            <path d="M5 4.8h8v2.2h-2.9V13H7.9V7H5z" fill="#fff"></path>
-          </svg>
-        </span>
+        <img class="brand-mark" src="assets/trakt-logomark-mono-dark.svg" alt="" aria-hidden="true">
         <h1>Trakt Scrobbler</h1>
       </div>
       <span id="hero-pill" class="hero-status" data-state="disconnected">Disconnected</span>
@@ -593,6 +618,11 @@
       </div>
       <p id="footer-note" class="footer-note" hidden></p>
     </footer>
+
+    <div class="provider" aria-label="Trakt integration">
+      <span>Scrobbler for</span>
+      <img class="provider-logo" src="assets/trakt-logo-dark.svg" alt="Trakt">
+    </div>
   </div>
 
   <script>
@@ -709,7 +739,7 @@
       function compactAuthSummary(auth) {
         if (!auth) return "Not connected";
         if (auth.busy) return "Authorize in browser";
-        if (auth.connected && auth.user && auth.user.username) return "Logged in as @" + auth.user.username;
+        if (auth.connected && auth.user && auth.user.username) return "Logged in as";
         if (auth.connected) return "Connected";
         if (auth.state === "error") return "Auth failed";
         if (auth.state === "missing_credentials") return "No credentials";
@@ -771,6 +801,23 @@
       function setText(id, value) {
         var node = document.getElementById(id);
         if (node) node.textContent = value;
+      }
+
+      function renderAuthSummary(auth) {
+        var node = document.getElementById("auth-summary");
+        if (!node) return;
+
+        node.textContent = "";
+
+        if (auth && auth.connected && auth.user && auth.user.username) {
+          node.appendChild(document.createTextNode("Logged in as "));
+          var emphasis = document.createElement("em");
+          emphasis.textContent = "@" + auth.user.username;
+          node.appendChild(emphasis);
+          return;
+        }
+
+        node.textContent = compactAuthSummary(auth);
       }
 
       function setValue(id, value) {
@@ -929,6 +976,7 @@
         var hasCode = !!auth.deviceCode;
         var detail = compactAuthDetail(auth);
         var heroPill = document.getElementById("hero-pill");
+        var authSummary = document.getElementById("auth-summary");
         var connectButton = document.getElementById("connect-button");
         var reauthButton = document.getElementById("reauth-button");
         var signOutButton = document.getElementById("signout-button");
@@ -952,7 +1000,10 @@
         heroPill.dataset.state = auth.state || "disconnected";
         heroPill.textContent = formatStateLabel(auth.state);
 
-        setText("auth-summary", compactAuthSummary(auth));
+        renderAuthSummary(auth);
+        if (authSummary) {
+          authSummary.dataset.tone = connected && !auth.busy ? "soft" : "strong";
+        }
         setText("auth-detail", detail);
         connectButton.disabled = !stateReady || !!auth.busy || pendingAction === "connect";
         connectButton.textContent = auth.busy

@@ -4,6 +4,7 @@ var parser = require("./parser.js");
 var monitor = require("./monitor.js");
 var trakt = require("./trakt.js");
 var DEBUG_LOG_PATH = "@data/debug.log";
+var MAX_DEBUG_LOG_CHARS = 200000;
 var POLL_INTERVAL_MS = 2000;
 var UI_POLL_INTERVAL_MS = 750;
 var PLUGIN_SIDEBAR_ID = "plugin:io.github.fahim.iinatraktscrobbler";
@@ -87,8 +88,8 @@ function appendDebugLog(message) {
   try {
     var existing = file.exists(DEBUG_LOG_PATH) ? (file.read(DEBUG_LOG_PATH) || "") : "";
     var next = existing + line + "\n";
-    if (next.length > 32000) {
-      next = next.slice(next.length - 32000);
+    if (next.length > MAX_DEBUG_LOG_CHARS) {
+      next = next.slice(next.length - MAX_DEBUG_LOG_CHARS);
     }
     file.write(DEBUG_LOG_PATH, next);
   } catch (_error) {}
@@ -459,6 +460,13 @@ function checkAuthActionRequest() {
   }
 
   authActionChain = authActionChain.then(async function() {
+    if (action === "show_sidebar") {
+      log("Preferences requested sidebar show");
+      showSidebarTab();
+      queueSidebarRefresh(true);
+      return;
+    }
+
     if (action === "connect") {
       var force = trakt.getAuthStatus().state === "connected";
       await runManualAuth(force);
@@ -1122,6 +1130,8 @@ function handleFileLoaded() {
   scheduleBootstrapTicks();
 }
 
+appendDebugLog("[IINATraktScrobbler] --------------------------------------------------");
+appendDebugLog("[IINATraktScrobbler] Session start");
 log("Plugin main loaded");
 appendDebugLog("[IINATraktScrobbler] Parser mode default=guessit-with-heuristic-fallback");
 persistAuthStatus();

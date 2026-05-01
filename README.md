@@ -1,41 +1,35 @@
 # Trakt Scrobbler
 
-An IINA plugin for Trakt scrobbling.
+Trakt Scrobbler is an IINA plugin that scrobbles local movies and episodes to Trakt. It parses file names with `guessit-js`, matches them on Trakt, and keeps track of playback as you watch.
 
-## Current Status
+## Install
 
-This repo now has the first real scrobble foundation in place:
+The best way to install it is from IINA itself.
 
-- vendored `guessit-js` with heuristic fallback
-- Trakt device-auth flow with explicit connect controls
-- explicit Trakt auth controls in plugin preferences and a live Trakt sidebar
-- a plugin menu entry for quickly reopening the Trakt sidebar
-- token persistence with macOS keychain primary storage and `@data` fallback
-- Trakt show/movie ID lookup cache
-- playback state tracking for `start`, `pause`, and `stop`
-- preview and fast-pause guards based on the Python `trakt-scrobbler` reference app
-- parser smoke tests and playback state unit tests
-- bundled Trakt app credential support with optional local preference overrides
+Open `Plugins` in IINA, choose `Install from GitHub`, paste `https://github.com/i3p9/iina-trakt-scrobbler`, and install it. That is also the best way to get future updates.
 
-What is still missing:
+If you prefer, you can also download the `.iinaplgz` package from GitHub Releases and install that manually.
 
-- retry/backlog handling for failed `stop` scrobbles
-- richer logging/inspection for Trakt payloads
-- packaging polish and GitHub metadata
-- embedding the real shared Trakt app credentials for release
+## Features
+
+- Trakt device auth
+- Movie and episode parsing with `guessit-js`
+- Automatic Trakt matching
+- `start`, `pause`, and `stop` scrobbling
+- Preview and fast-pause guards
+- Live sidebar with auth, playback, and scrobble status
+
+## Todo
+
+- Cache playback locally when a scrobble cannot be sent, then retry or reconcile it later
+- Add a manual search / correction flow in the sidebar for cases where a file is misidentified
 
 ## Development
 
-Stage a clean plugin folder:
+Stage the plugin for local testing:
 
 ```bash
 ./scripts/stage-plugin.sh
-```
-
-That creates:
-
-```bash
-.build/iina-trakt-scrobbler.iinaplugin
 ```
 
 Link it into IINA:
@@ -44,39 +38,28 @@ Link it into IINA:
 /Applications/IINA.app/Contents/MacOS/iina-plugin link "$(pwd)/.build/iina-trakt-scrobbler.iinaplugin"
 ```
 
+Build a release package:
+
+```bash
+./scripts/pack-release.sh
+```
+
 Useful checks:
 
 ```bash
 node --check main.js
+node --check trakt.js
 node tests/parser-smoke.js
 node tests/monitor-state.js
-./scripts/pack-release.sh
+node tests/trakt-resolution.js
 ```
 
-## Runtime Notes
+## Notes
 
-- Release builds are intended to use bundled Trakt app credentials from `trakt_keys.js`.
-- Until those are embedded, you can use the optional client ID and client secret override fields in plugin preferences.
-- Use the plugin sidebar for live auth state, device codes, connected account info, token validity, playback identity, and recent scrobble status.
-- Use `Plugin > Trakt Scrobbler > Show Sidebar` or `Command+T` to reopen the sidebar quickly.
-- Connect to Trakt explicitly from the sidebar or plugin preferences.
-- Playback will not trigger device auth automatically; unauthenticated scrobbles are skipped until you connect.
+- Tokens are stored in the macOS keychain when possible, with an `@data` fallback during development.
 - Search results are cached in `@data/trakt-cache.json`.
-- OAuth tokens are stored in the macOS keychain when possible, with a mirrored `@data/trakt-token.json` fallback for development.
 - Debug logs are written to `@data/debug.log`.
 
-## Layout
+## Acknowledgements
 
-- `Info.json`: plugin manifest
-- `main.js`: IINA runtime, playback tracking, and event handling
-- `monitor.js`: pure playback transition logic derived from the Python reference monitor
-- `trakt.js`: Trakt auth, search, ID caching, and scrobble calls
-- `trakt_keys.js`: bundled shared Trakt app credentials for release builds
-- `parser.js`: `guessit-js` backed parser with heuristic fallback
-- `preferences.html`: Trakt settings UI
-- `sidebar.html`: live Trakt sidebar UI
-- `vendor/`: vendored `guessit-js` runtime and attribution
-- `tests/parser-smoke.js`: parser smoke tests
-- `tests/monitor-state.js`: playback state-machine tests
-- `scripts/stage-plugin.sh`: stages the plugin for local IINA development
-- `scripts/pack-release.sh`: builds a release archive
+Inspired by `trakt-scrobbler`.

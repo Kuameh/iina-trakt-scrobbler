@@ -1,112 +1,211 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <style>
-  .pref-grid {
-    display: grid;
-    grid-template-columns: 180px 1fr;
-    gap: 10px 12px;
-    align-items: start;
+  * {
+    box-sizing: border-box;
   }
 
-  .pref-note {
-    grid-column: 2;
-    margin-top: -6px;
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    overflow-y: auto;
   }
 
-  .callout {
-    padding: 12px 14px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  body {
+    padding: 16px;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    line-height: 1.4;
   }
 
-  .button-row {
+  p,
+  h2,
+  h3 {
+    margin: 0;
+  }
+
+  small,
+  .small {
+    font-size: 11px;
+  }
+
+  .secondary {
+    color: rgba(0, 0, 0, 0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .secondary {
+      color: rgba(255, 255, 255, 0.58);
+    }
+  }
+
+  .pref-section {
+    margin-bottom: 14px;
+  }
+
+  .pref-brand {
     display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .pref-brand picture,
+  .pref-brand img {
+    display: block;
+    height: 18px;
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .pref-help {
+    margin-top: 4px;
+  }
+
+  .button-row,
+  .path-row,
+  .check-row {
+    margin-top: 6px;
+  }
+
+  .button-row,
+  .path-row {
+    display: flex;
+    align-items: center;
     gap: 8px;
     flex-wrap: wrap;
   }
 
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   button {
-    border: 0;
-    border-radius: 999px;
-    padding: 8px 14px;
     font: inherit;
-    cursor: pointer;
-  }
-
-  button.primary {
-    background: #f5f5f5;
-    color: #111;
-  }
-
-  button.secondary {
-    background: rgba(255, 255, 255, 0.08);
-    color: inherit;
+    padding: 2px 10px;
   }
 
   input[type="text"] {
     width: 100%;
   }
+
+  .path-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  details {
+    margin-top: 8px;
+  }
+
+  details[open] {
+    overflow: visible;
+  }
+
+  summary {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .detail-body {
+    margin-top: 8px;
+  }
+
+  .field-grid {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 8px 12px;
+    align-items: start;
+    margin-top: 8px;
+  }
+
+  .field-grid label {
+    padding-top: 4px;
+  }
+
+  .field-note {
+    grid-column: 2;
+    margin-top: -2px;
+  }
+
+  #copy-log-status {
+    margin-top: 4px;
+    min-height: 14px;
+  }
 </style>
 </head>
 <body>
-  <div class="pref-section">
-    <h3>Trakt</h3>
-    <div class="pref-grid">
-      <label>Actions</label>
-      <div class="button-row">
-        <button id="connect-button" class="primary" type="button">Connect to Trakt</button>
-        <button id="signout-button" class="secondary" type="button">Sign Out</button>
-      </div>
-      <div></div>
-      <p class="small secondary pref-help pref-note">
-        Clicking Connect opens the browser flow and brings the Trakt sidebar into view so the device code, connected account, token validity, playback identity, and last scrobble status are visible there immediately.
-      </p>
-
-      <label for="trakt-client-id">Dev Override Client ID</label>
-      <input id="trakt-client-id" type="text" data-pref-key="trakt_client_id" placeholder="Optional local override" />
-      <div></div>
-      <p class="small secondary pref-help pref-note">
-        Leave this blank in normal use. This is only for local development if bundled credentials are not embedded into the build.
-      </p>
-
-      <label for="trakt-client-secret">Dev Override Client Secret</label>
-      <input id="trakt-client-secret" type="text" data-pref-key="trakt_client_secret" placeholder="Optional local override" />
-      <div></div>
-      <p class="small secondary pref-help pref-note">
-        Access tokens are stored in the macOS keychain when possible, with an @data fallback during development.
-      </p>
+  <div class="pref-brand">
+    <picture>
+      <source srcset="assets/trakt-logo-dark.svg" media="(prefers-color-scheme: dark)">
+      <img src="assets/trakt-logo.svg" alt="Trakt">
+    </picture>
+    <div>
+      <h2>Trakt Scrobbler</h2>
+      <p class="small secondary">Trakt scrobbler plugin for IINA.</p>
     </div>
   </div>
 
   <div class="pref-section">
-    <h3>Scrobbling</h3>
-    <div class="pref-grid">
-      <label>
-        <input type="checkbox" data-type="bool" data-pref-key="scrobble_enabled" />
-        Enable scrobbling
-      </label>
-      <div></div>
-
-      <label>
-        <input type="checkbox" data-type="bool" data-pref-key="debug_osd" />
-        Show debug OSD
-      </label>
-      <div></div>
-    </div>
-  </div>
-
-  <div class="pref-section">
-    <p class="small secondary">
-      Current behavior: parse media with guessit, map it to Trakt, authenticate with the device flow, and send start, pause, and stop scrobbles with preview and fast-pause guards inspired by the Python reference implementation.
+    <h3>Sidebar</h3>
+    <p class="small secondary pref-help">
+      Open the sidebar to connect Trakt, re-authenticate, pause scrobbling, and review recent activity.
     </p>
+    <div class="button-row">
+      <button id="open-sidebar-button" type="button">Open Sidebar</button>
+      <span class="small secondary">Shortcut: <code>⌘T</code></span>
+    </div>
+  </div>
+
+  <div class="pref-section">
+    <h3>Troubleshooting</h3>
+    <p class="small secondary pref-help">Debug log file.</p>
+    <label class="check-row">
+      <input type="checkbox" data-type="bool" data-pref-key="debug_osd" />
+      <span>Show debug OSD while testing</span>
+    </label>
+    <div class="path-row">
+      <input id="log-path" type="text" readonly value="~/Library/Application Support/com.colliderli.iina/plugins/.data/io.github.fahim.iinatraktscrobbler/debug.log" />
+      <button id="copy-log-path-button" type="button">Copy Path</button>
+    </div>
+    <p id="copy-log-status" class="small secondary"></p>
+  </div>
+
+  <div class="pref-section">
+    <details>
+      <summary>Development Overrides</summary>
+      <div class="detail-body">
+        <p class="small secondary">
+          Optional local credential overrides for development.
+        </p>
+        <div class="field-grid">
+          <label for="trakt-client-id">Client ID</label>
+          <input id="trakt-client-id" type="text" data-pref-key="trakt_client_id" placeholder="Optional local override" />
+          <div></div>
+          <p class="small secondary field-note">Overrides the bundled Trakt client ID on this machine.</p>
+
+          <label for="trakt-client-secret">Client Secret</label>
+          <input id="trakt-client-secret" type="text" data-pref-key="trakt_client_secret" placeholder="Optional local override" />
+          <div></div>
+          <p class="small secondary field-note">Tokens are stored in the macOS keychain when possible, with an <code>@data</code> fallback during development.</p>
+        </div>
+      </div>
+    </details>
   </div>
 
   <script>
     (function() {
       var prefApi = window.iina && iina.preferences ? iina.preferences : null;
+      var logPath = document.getElementById("log-path");
+      var copyStatus = document.getElementById("copy-log-status");
+      var copyTimer = 0;
 
       function writePref(key, value) {
         if (!prefApi || typeof prefApi.set !== "function") return;
@@ -128,12 +227,55 @@
         syncPrefStore();
       }
 
-      document.getElementById("connect-button").addEventListener("click", function() {
-        requestAction("connect");
+      function showCopyStatus(message) {
+        if (copyTimer) {
+          clearTimeout(copyTimer);
+          copyTimer = 0;
+        }
+
+        copyStatus.textContent = message || "";
+        if (!message) return;
+        copyTimer = setTimeout(function() {
+          copyStatus.textContent = "";
+          copyTimer = 0;
+        }, 2400);
+      }
+
+      async function copyText(value) {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(value);
+          return true;
+        }
+
+        try {
+          logPath.focus();
+          logPath.select();
+          return document.execCommand("copy");
+        } catch (_error) {
+          return false;
+        }
+      }
+
+      document.getElementById("open-sidebar-button").addEventListener("click", function() {
+        requestAction("show_sidebar");
       });
 
-      document.getElementById("signout-button").addEventListener("click", function() {
-        requestAction("signout");
+      document.getElementById("copy-log-path-button").addEventListener("click", async function() {
+        var ok = false;
+        try {
+          ok = await copyText(logPath.value);
+        } catch (_error) {
+          ok = false;
+        }
+        showCopyStatus(ok ? "Log path copied." : "Copy failed. Copy manually.");
+      });
+
+      logPath.addEventListener("focus", function() {
+        logPath.select();
+      });
+
+      logPath.addEventListener("click", function() {
+        logPath.select();
       });
     })();
   </script>
