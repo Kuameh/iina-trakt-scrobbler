@@ -159,18 +159,18 @@ function decideActions(prev, current, flags, config) {
     if (current.state === State.Stopped || transition.absProgressSkipped > skipInterval) {
       actions.push("scrobble");
       actions.push("exit_fast_pause");
-    } else if (current.state === State.Paused) {
-      actions.push("clear_buf");
     } else if (current.state === State.Playing) {
-      actions.push("delayed_play");
+      actions.push("exit_fast_pause");
     }
     return actions;
   }
 
-  actions.push("scrobble");
-  if (transition.fromPlayingToPaused && transition.elapsedRealtime < fastPauseThreshold) {
+  if (transition.fromPlayingToPaused) {
     actions.push("enter_fast_pause");
+    return actions;
   }
+
+  actions.push("scrobble");
   return actions;
 }
 

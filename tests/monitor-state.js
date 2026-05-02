@@ -118,17 +118,17 @@ test("fast pause enters on an immediate pause", function() {
     state(episodeA, 10, monitor.State.Playing, 1),
     state(episodeA, 10.2, monitor.State.Paused, 1.4),
     {},
-    ["scrobble", "enter_fast_pause"]
+    ["enter_fast_pause"]
   );
 });
 
 test("fast pause resumes with delayed play", function() {
   expectActions(
-    "quick resume should delay the next scrobble",
+    "quick resume should just exit fast-pause mode",
     state(episodeA, 10.2, monitor.State.Paused, 1.4),
     state(episodeA, 10.3, monitor.State.Playing, 2),
     { fastPause: true },
-    ["delayed_play"]
+    ["exit_fast_pause"]
   );
 });
 

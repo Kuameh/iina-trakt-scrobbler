@@ -293,6 +293,88 @@ async function run() {
     assert.deepStrictEqual(calls, []);
   });
 
+  await test("skips stop scrobbles below 1 percent without calling trakt", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({
+      movie: {
+        "big fat liar|2002": 123
+      },
+      show: {}
+    });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt, calls } = loadFreshTrakt(store, function() {
+      throw new Error("stop below 1% should not hit the network");
+    }, logs);
+
+    const result = await trakt.scrobble("stop", {
+      type: "movie",
+      title: "Big Fat Liar",
+      year: 2002
+    }, 0.15);
+
+    assert.deepStrictEqual(result, {
+      ok: false,
+      skip: true,
+      reason: "stop-too-early"
+    });
+    assert.deepStrictEqual(calls, []);
+    assert(logs.some(function(line) {
+      return line.indexOf("Skipping Trakt stop below 1% progress") >= 0;
+    }));
+  });
+
+  await test("logs payload and body when trakt returns 422", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({
+      movie: {
+        "big fat liar|2002": 123
+      },
+      show: {}
+    });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/scrobble/pause") {
+        return {
+          statusCode: 422,
+          body: {
+            error: "validation failed"
+          }
+        };
+      }
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    let thrown = null;
+    try {
+      await trakt.scrobble("pause", {
+        type: "movie",
+        title: "Big Fat Liar",
+        year: 2002
+      }, 5.25);
+    } catch (error) {
+      thrown = error;
+    }
+
+    assert(thrown, "expected trakt.scrobble to throw on 422");
+    assert.strictEqual(thrown.statusCode, 422);
+    assert.strictEqual(thrown.scrobbleVerb, "pause");
+    assert.deepStrictEqual(thrown.requestPayload, {
+      movie: {
+        ids: { trakt: 123 }
+      },
+      progress: 5.25
+    });
+    assert(logs.some(function(line) {
+      return line.indexOf("Trakt scrobble HTTP 422 verb=pause") >= 0 &&
+        line.indexOf("\"progress\":5.25") >= 0 &&
+        line.indexOf("validation failed") >= 0;
+    }));
+  });
+
   console.log("trakt resolution tests passed");
 }
 

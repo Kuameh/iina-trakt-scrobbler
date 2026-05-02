@@ -325,6 +325,23 @@ function encodeQuery(params) {
   }).join("&");
 }
 
+function summarizeBody(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (_error) {
+    return String(value);
+  }
+}
+
+function shouldSkipEarlyScrobble(verb, progress) {
+  return (verb === "pause" || verb === "stop") && Number(progress || 0) < 1;
+}
+
+function earlyScrobbleReason(verb) {
+  if (verb === "stop") return "stop-too-early";
+  return "pause-too-early";
+}
+
 async function rawRequest(method, path, options) {
   if (!runtime.utils || typeof runtime.utils.exec !== "function") {
     throw new Error("utils.exec is unavailable");
@@ -786,6 +803,18 @@ function episodeIdentityLabel(mediaInfo) {
     "E" + String(mediaInfo.episode || "?");
 }
 
+function mediaIdentityLabel(mediaInfo) {
+  if (!mediaInfo) return "unknown media";
+  if (mediaInfo.type === "episode") {
+    var suffix = mediaInfo.episodeTitle ? (" - " + mediaInfo.episodeTitle) : "";
+    return String(mediaInfo.showTitle || mediaInfo.title || "Unknown Show") +
+      " S" + String(Number(mediaInfo.season || 0)).padStart(2, "0") +
+      "E" + String(Number(mediaInfo.episode || 0)).padStart(2, "0") +
+      suffix;
+  }
+  return String(mediaInfo.title || "Unknown Movie") + (mediaInfo.year ? (" (" + mediaInfo.year + ")") : "");
+}
+
 function titlesMatch(expected, actual) {
   var left = normalizeTitle(expected);
   var right = normalizeTitle(actual);
@@ -1050,6 +1079,19 @@ async function scrobble(verb, mediaInfo, progress) {
   }
 
   payload.progress = Number(progress || 0);
+  if (shouldSkipEarlyScrobble(verb, payload.progress)) {
+    log(
+      "Skipping Trakt " + verb +
+      " below 1% progress for " +
+      mediaIdentityLabel(mediaInfo) +
+      " at " + payload.progress.toFixed(2) + "%"
+    );
+    return {
+      ok: false,
+      skip: true,
+      reason: earlyScrobbleReason(verb)
+    };
+  }
   var response;
   try {
     response = await authedRequest("POST", "/scrobble/" + verb, {
@@ -1083,7 +1125,24 @@ async function scrobble(verb, mediaInfo, progress) {
   }
 
   if (response.statusCode >= 400) {
-    throw new Error(response.body.error_description || response.body.error || ("Trakt scrobble failed with status " + response.statusCode));
+    log(
+      "Trakt scrobble HTTP " + response.statusCode +
+      " verb=" + verb +
+      " payload=" + summarizeBody(payload) +
+      " body=" + (response.rawBody || summarizeBody(response.body))
+    );
+    var error = new Error(
+      response.body.error_description ||
+      response.body.error ||
+      response.rawBody ||
+      ("Trakt scrobble failed with status " + response.statusCode)
+    );
+    error.statusCode = response.statusCode;
+    error.responseBody = response.body;
+    error.responseRawBody = response.rawBody;
+    error.requestPayload = payload;
+    error.scrobbleVerb = verb;
+    throw error;
   }
 
   return {

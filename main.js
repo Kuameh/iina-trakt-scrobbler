@@ -66,7 +66,6 @@ function loadVendoredCommonJs(modulePath) {
 
 parser.configure({
   loadGuessitModule: function() {
-    appendDebugLog("[IINATraktScrobbler] Loading vendored guessit bundle");
     return loadVendoredCommonJs("vendor/guessit-js.cjs");
   }
 });
@@ -835,8 +834,8 @@ function queueScrobble(verb, snapshot) {
     reason: "",
     progress: payload.progress
   });
+  log("Scrobble " + verb + " queued for " + mediaLabel(payload.mediaInfo) + " at " + payload.progress.toFixed(2) + "%");
   playbackState.scrobbleChain = playbackState.scrobbleChain.then(async function() {
-    log("Scrobble " + verb + " queued for " + mediaLabel(payload.mediaInfo) + " at " + payload.progress.toFixed(2) + "%");
     setScrobbleStatus({
       status: "sending",
       verb: verb,
@@ -955,6 +954,32 @@ function queueScrobble(verb, snapshot) {
   });
 }
 
+async function flushScrobbleQueue(reason, timeoutMs) {
+  var timeout = Math.max(0, Number(timeoutMs || 0));
+  var label = reason ? (" for " + reason) : "";
+  if (timeout > 0) {
+    log("Waiting up to " + timeout + "ms for pending scrobbles" + label);
+  } else {
+    log("Waiting for pending scrobbles" + label);
+  }
+
+  var chain = playbackState.scrobbleChain.catch(function(error) {
+    log("Pending scrobble flush saw error: " + errStr(error));
+  });
+
+  if (!timeout) {
+    await chain;
+    return;
+  }
+
+  await Promise.race([
+    chain,
+    new Promise(function(resolve) {
+      setTimeout(resolve, timeout);
+    })
+  ]);
+}
+
 function delayedScrobble(cleanup) {
   if (playbackState.scrobbleBuffer) {
     var buffered = cloneSnapshot(playbackState.scrobbleBuffer);
@@ -1011,6 +1036,12 @@ function executeAction(action, prevSnapshot, currentSnapshot) {
 
   if (action === "enter_fast_pause") {
     playbackState.fastPause = true;
+    playbackState.scrobbleBuffer = cloneSnapshot(currentSnapshot);
+    clearTimer("fastPauseTimer");
+    playbackState.fastPauseTimer = createResumableTimer(playbackConfig().fastPauseDuration * 1000, function() {
+      delayedScrobble(exitFastPause);
+    });
+    playbackState.fastPauseTimer.start();
     log("Entered fast-pause mode");
     return;
   }
@@ -1078,7 +1109,7 @@ function handleStatusUpdate(reason) {
   queueSidebarRefresh(false);
 }
 
-function finalizeCurrentMedia(reason) {
+async function finalizeCurrentMedia(reason) {
   if (!playbackState.prevSnapshot) {
     currentMedia = null;
     lastSourceSignature = "";
@@ -1098,6 +1129,10 @@ function finalizeCurrentMedia(reason) {
   playbackState.prevSnapshot = stoppedSnapshot;
   currentMedia = null;
   lastSourceSignature = "";
+  queueSidebarRefresh(false);
+  if (reason === "end-file") {
+    await flushScrobbleQueue("end-file", 2500);
+  }
   resetPlaybackTracking();
   queueSidebarRefresh(false);
 }
@@ -1128,7 +1163,7 @@ function ensureUiPollTimer() {
   }, UI_POLL_INTERVAL_MS);
 }
 
-function handleFileLoaded() {
+async function handleFileLoaded() {
   var source = getCurrentSource();
   var signature = source.url || source.title;
   if (signature && signature === lastSourceSignature && currentMedia) {
@@ -1136,7 +1171,7 @@ function handleFileLoaded() {
   }
 
   if (currentMedia && lastSourceSignature && signature && signature !== lastSourceSignature) {
-    finalizeCurrentMedia("new-file");
+    await finalizeCurrentMedia("new-file");
   } else {
     resetPlaybackTracking();
     currentMedia = null;
@@ -1164,7 +1199,7 @@ event.on("iina.window-loaded", wrapEvent("iina.window-loaded", function() {
 }));
 
 event.on("iina.file-loaded", wrapEvent("iina.file-loaded", function() {
-  handleFileLoaded();
+  return handleFileLoaded();
 }));
 
 event.on("mpv.pause.changed", wrapEvent("mpv.pause.changed", function() {
@@ -1180,5 +1215,5 @@ event.on("mpv.duration.changed", wrapEvent("mpv.duration.changed", function() {
 }));
 
 event.on("mpv.end-file", wrapEvent("mpv.end-file", function() {
-  finalizeCurrentMedia("end-file");
+  return finalizeCurrentMedia("end-file");
 }));
