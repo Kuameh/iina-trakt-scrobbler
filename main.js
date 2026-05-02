@@ -126,10 +126,28 @@ function debugOsd(message) {
   } catch (_error) {}
 }
 
+function statusOsd(message) {
+  if (!prefBool("status_osd", true)) return;
+  try {
+    core.osd("Trakt Scrobbler: " + message);
+  } catch (_error) {}
+}
+
 function importantOsd(message) {
   try {
     core.osd("Trakt Scrobbler: " + message);
   } catch (_error) {}
+}
+
+function maybeShowScrobbleStatusOsd(verb) {
+  if (verb === "start") {
+    statusOsd("Watching on Trakt");
+    return;
+  }
+
+  if (verb === "stop") {
+    statusOsd("Stopped on Trakt");
+  }
 }
 
 function persistPreferences(values) {
@@ -840,6 +858,7 @@ function queueScrobble(verb, snapshot) {
           progress: payload.progress
         });
         log("Scrobble " + verb + " succeeded for " + mediaLabel(payload.mediaInfo));
+        maybeShowScrobbleStatusOsd(verb);
         if (!firstScrobbleNoticeShown) {
           debugOsd("Scrobble flow active");
           firstScrobbleNoticeShown = true;
