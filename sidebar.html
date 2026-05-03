@@ -324,6 +324,19 @@
     font-size: 14px;
     font-weight: 700;
     line-height: 1.25;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .scrobble-title.is-pending::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--blue);
+    box-shadow: 0 0 0 0 rgba(37, 97, 221, 0.34);
+    animation: traktPulse 1.4s ease-out infinite;
   }
 
   .scrobble-head {
@@ -433,6 +446,23 @@
     height: 12px;
     width: auto;
     opacity: 0.9;
+  }
+
+  @keyframes traktPulse {
+    0% {
+      transform: scale(0.92);
+      box-shadow: 0 0 0 0 rgba(37, 97, 221, 0.34);
+    }
+
+    70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 7px rgba(37, 97, 221, 0);
+    }
+
+    100% {
+      transform: scale(0.92);
+      box-shadow: 0 0 0 0 rgba(37, 97, 221, 0);
+    }
   }
 
   button {
@@ -704,12 +734,26 @@
       }
 
       function formatUpdatedAt(value) {
-        if (!value) return "Just now";
+        if (!value) return "just now";
         var date = new Date(value);
-        if (Number.isNaN(date.getTime())) return "Just now";
-        return date.toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit"
+        if (Number.isNaN(date.getTime())) return "just now";
+
+        var diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+        if (diffSeconds < 5) return "just now";
+        if (diffSeconds < 60) return diffSeconds + "s ago";
+
+        var diffMinutes = Math.floor(diffSeconds / 60);
+        if (diffMinutes < 60) return diffMinutes + "m ago";
+
+        var diffHours = Math.floor(diffMinutes / 60);
+        if (diffHours < 24) return diffHours + "h ago";
+
+        var diffDays = Math.floor(diffHours / 24);
+        if (diffDays < 7) return diffDays + "d ago";
+
+        return date.toLocaleDateString([], {
+          month: "short",
+          day: "numeric"
         });
       }
 
@@ -757,9 +801,13 @@
 
       function compactScrobbleTitle(scrobble) {
         if (!scrobble) return "Waiting";
+        if ((scrobble.status === "queued" || scrobble.status === "sending") && scrobble.verb) {
+          if (scrobble.verb === "start") return "Watching on Trakt";
+          if (scrobble.verb === "pause") return "Paused on Trakt";
+          if (scrobble.verb === "stop") return "Stopped on Trakt";
+        }
         if (scrobble.status === "ready") return "Ready";
-        if (scrobble.status === "queued") return titleCase(scrobble.verb || "Update") + " pending";
-        if (scrobble.status === "sending") return "Updating Trakt";
+        if (scrobble.status === "queued" || scrobble.status === "sending") return "Updating Trakt";
         if (scrobble.status === "succeeded") {
           if (scrobble.verb === "start") return "Watching on Trakt";
           if (scrobble.verb === "pause") return "Paused on Trakt";
@@ -782,8 +830,7 @@
       function compactScrobbleDetail(scrobble) {
         if (!scrobble) return "Waiting for playback.";
         if (scrobble.status === "ready") return "";
-        if (scrobble.status === "queued") return "Waiting to send.";
-        if (scrobble.status === "sending") return "";
+        if (scrobble.status === "queued" || scrobble.status === "sending") return "";
         if (scrobble.status === "succeeded") return "";
         if (scrobble.status === "duplicate") return "";
         if (scrobble.status === "unmatched") return "Try a cleaner file name.";
@@ -1079,10 +1126,14 @@
         var targetVisible = !!scrobble.mediaLabel;
         var updatedVisible = !!scrobble.updatedAt && scrobble.status !== "idle" && scrobble.status !== "ready";
         var detail = compactScrobbleDetail(scrobble);
+        var scrobbleVerb = document.getElementById("scrobble-verb");
         setText("scrobble-verb", compactScrobbleTitle(scrobble));
         setText("scrobble-detail", detail);
         setText("scrobble-target", scrobble.mediaLabel || "No target");
         setText("scrobble-updated", formatUpdatedAt(scrobble.updatedAt));
+        if (scrobbleVerb) {
+          scrobbleVerb.classList.toggle("is-pending", scrobble.status === "queued" || scrobble.status === "sending");
+        }
         setHidden("scrobble-target", !targetVisible);
         setHidden("scrobble-updated", !updatedVisible);
         setHidden("scrobble-detail", !detail);
@@ -1162,6 +1213,10 @@
       }
 
       render();
+      setInterval(function() {
+        if (!state.scrobble || !state.scrobble.updatedAt) return;
+        renderScrobble();
+      }, 1000);
       send("ready");
     })();
   </script>
