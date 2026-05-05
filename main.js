@@ -129,7 +129,7 @@ function debugOsd(message) {
 function statusOsd(message) {
   if (!prefBool("status_osd", true)) return;
   try {
-    core.osd("Trakt Scrobbler: " + message);
+    core.osd(message);
   } catch (_error) {}
 }
 
@@ -162,25 +162,73 @@ function successfulScrobbleDetail(action, progress) {
   return "Trakt accepted this scrobble at " + value.toFixed(2) + "%.";
 }
 
-function maybeShowScrobbleStatusOsd(verb, action) {
+function truncateOsdText(value, maxLength) {
+  var text = String(value || "").trim();
+  if (!text || text.length <= maxLength) return text;
+  return text.slice(0, Math.max(0, maxLength - 1)).trim() + "…";
+}
+
+function osdMediaLabel(mediaInfo) {
+  if (!mediaInfo) return "";
+
+  if (mediaInfo.type === "episode") {
+    var episodeCode = "S" + pad2(mediaInfo.season) + "E" + pad2(mediaInfo.episode);
+    if (mediaInfo.episodeTitle) {
+      return truncateOsdText(episodeCode + " - " + mediaInfo.episodeTitle, 64);
+    }
+    return truncateOsdText((mediaInfo.showTitle || mediaInfo.title || "") + " " + episodeCode, 64);
+  }
+
+  return truncateOsdText(mediaInfo.title + (mediaInfo.year ? (" (" + mediaInfo.year + ")") : ""), 64);
+}
+
+function showScrobbleStatusOsd(title, mediaInfo) {
+  if (!prefBool("status_osd", true)) return;
+
+  var message = String(title || "").trim();
+  var label = osdMediaLabel(mediaInfo);
+  if (label) {
+    message += ": " + label;
+  }
+
+  statusOsd(message);
+}
+
+function maybeShowScrobbleStatusOsd(verb, action, mediaInfo) {
   if (action === "scrobble") {
-    statusOsd("Watched on Trakt");
+    showScrobbleStatusOsd("Watched on Trakt", mediaInfo);
     return;
   }
 
   if (action === "pause") {
-    statusOsd("Paused on Trakt");
+    showScrobbleStatusOsd("Progress Saved", mediaInfo);
     return;
   }
 
   if (verb === "start") {
-    statusOsd("Watching on Trakt");
+    showScrobbleStatusOsd("Scrobble Started", mediaInfo);
     return;
   }
 
   if (verb === "stop") {
-    statusOsd("Stopped on Trakt");
+    showScrobbleStatusOsd("Stopped on Trakt", mediaInfo);
   }
+}
+
+function setStatusOsdEnabled(enabled) {
+  var nextValue = !!enabled;
+  var prevValue = prefBool("status_osd", true);
+  if (nextValue === prevValue) {
+    queueSidebarRefresh(false);
+    return;
+  }
+
+  persistPreferences({
+    status_osd: nextValue
+  });
+
+  log("Trakt status OSD " + (nextValue ? "enabled" : "disabled"));
+  queueSidebarRefresh(false);
 }
 
 function persistPreferences(values) {
@@ -327,6 +375,7 @@ async function buildSidebarPayload(forceProfileRefresh) {
       version: PLUGIN_VERSION
     },
     scrobblingEnabled: prefBool("scrobble_enabled", true),
+    statusOsdEnabled: prefBool("status_osd", true),
     auth: {
       state: auth.state,
       summary: auth.summary,
@@ -401,6 +450,12 @@ function bindSidebarMessaging() {
     var enabled = !(payload && payload.enabled === false);
     log("Sidebar requested scrobbling " + (enabled ? "enable" : "disable"));
     setScrobblingEnabled(enabled);
+  });
+
+  sidebar.onMessage("toggle_status_osd", function(payload) {
+    var enabled = !(payload && payload.enabled === false);
+    log("Sidebar requested status OSD " + (enabled ? "enable" : "disable"));
+    setStatusOsdEnabled(enabled);
   });
 
   sidebar.onMessage("refresh", function() {
@@ -918,7 +973,7 @@ function queueScrobble(verb, snapshot) {
           " succeeded for " + mediaLabel(payload.mediaInfo) +
           " (action=" + traktAction + ", progress=" + traktProgress.toFixed(2) + "%)"
         );
-        maybeShowScrobbleStatusOsd(effectiveVerb, traktAction);
+        maybeShowScrobbleStatusOsd(effectiveVerb, traktAction, payload.mediaInfo);
         if (!firstScrobbleNoticeShown) {
           debugOsd("Scrobble flow active");
           firstScrobbleNoticeShown = true;

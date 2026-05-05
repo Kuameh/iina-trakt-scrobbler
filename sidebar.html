@@ -1,571 +1,573 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="UTF-8">
-<style>
-  :root {
-    color-scheme: light dark;
-    --text: #dadada;
-    --secondary: rgba(255, 255, 255, 0.58);
-    --tertiary: rgba(255, 255, 255, 0.36);
-    --highlight-color: #2561dd;
-    --highlight-text: #fff;
-    --input-border: rgba(255, 255, 255, 0.2);
-    --input-border-light: rgba(255, 255, 255, 0.1);
-    --input-border-dark: rgba(255, 255, 255, 0.3);
-    --box-bg: rgba(0, 0, 0, 0.2);
-    --control-bg: rgba(255, 255, 255, 0.08);
-    --control-border: rgba(255, 255, 255, 0.12);
-    --blue: #2561dd;
-    --red: #ff453a;
-    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    --font-mono: "SF Mono", "SFMono-Regular", "Menlo", monospace;
-  }
-
-  @media (prefers-color-scheme: light) {
+  <meta charset="UTF-8">
+  <style>
     :root {
-      --text: #1f2023;
-      --secondary: rgba(0, 0, 0, 0.58);
-      --tertiary: rgba(0, 0, 0, 0.42);
-      --highlight-color: #087fff;
+      color-scheme: light dark;
+      --text: #dadada;
+      --secondary: rgba(255, 255, 255, 0.58);
+      --tertiary: rgba(255, 255, 255, 0.36);
+      --highlight-color: #2561dd;
       --highlight-text: #fff;
-      --input-border: rgba(0, 0, 0, 0.1);
-      --input-border-light: rgba(0, 0, 0, 0.05);
-      --input-border-dark: rgba(0, 0, 0, 0.08);
-      --box-bg: rgba(0, 0, 0, 0.05);
-      --control-bg: rgba(0, 0, 0, 0.04);
-      --control-border: rgba(0, 0, 0, 0.08);
-      --blue: #087fff;
+      --input-border: rgba(255, 255, 255, 0.2);
+      --input-border-light: rgba(255, 255, 255, 0.1);
+      --input-border-dark: rgba(255, 255, 255, 0.3);
+      --box-bg: rgba(0, 0, 0, 0.2);
+      --control-bg: rgba(255, 255, 255, 0.08);
+      --control-border: rgba(255, 255, 255, 0.12);
+      --blue: #2561dd;
+      --red: #ff453a;
+      --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+      --font-mono: "SF Mono", "SFMono-Regular", "Menlo", monospace;
     }
-  }
 
-  * {
-    box-sizing: border-box;
-  }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --text: #1f2023;
+        --secondary: rgba(0, 0, 0, 0.58);
+        --tertiary: rgba(0, 0, 0, 0.42);
+        --highlight-color: #087fff;
+        --highlight-text: #fff;
+        --input-border: rgba(0, 0, 0, 0.1);
+        --input-border-light: rgba(0, 0, 0, 0.05);
+        --input-border-dark: rgba(0, 0, 0, 0.08);
+        --box-bg: rgba(0, 0, 0, 0.05);
+        --control-bg: rgba(0, 0, 0, 0.04);
+        --control-border: rgba(0, 0, 0, 0.08);
+        --blue: #087fff;
+      }
+    }
 
-  html,
-  body {
-    margin: 0;
-    min-height: 100%;
-    background: transparent;
-  }
+    * {
+      box-sizing: border-box;
+    }
 
-  body {
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: 13px;
-    line-height: 1.35;
-    background: none;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-  }
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: transparent;
+    }
 
-  .shell {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    padding: 8px 0 12px;
-  }
+    body {
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      line-height: 1.35;
+      background: none;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
 
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin: 0 7px 8px;
-    padding: 0 1px;
-  }
+    .shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 8px 0 12px;
+    }
 
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 7px 8px;
+      padding: 0 1px;
+    }
 
-  .brand-mark {
-    display: block;
-    width: 18px;
-    height: 18px;
-    flex: 0 0 auto;
-  }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
 
-  h1 {
-    margin: 0;
-    font-size: 18px;
-    line-height: 1.15;
-    letter-spacing: -0.015em;
-    font-weight: 700;
-  }
+    .brand-mark {
+      display: block;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+    }
 
-  .status-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 22px;
-    padding: 0 8px;
-    border-radius: 999px;
-    border: 1px solid var(--input-border);
-    background: var(--control-bg);
-    color: var(--secondary);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.15;
+      letter-spacing: -0.015em;
+      font-weight: 700;
+    }
 
-  .status-pill[data-state="error"],
-  .status-pill[data-state="missing_credentials"] {
-    color: var(--red);
-    border-color: rgba(255, 69, 58, 0.18);
-  }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid var(--input-border);
+      background: var(--control-bg);
+      color: var(--secondary);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
 
-  .hero-status {
-    color: var(--secondary);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
+    .status-pill[data-state="error"],
+    .status-pill[data-state="missing_credentials"] {
+      color: var(--red);
+      border-color: rgba(255, 69, 58, 0.18);
+    }
 
-  .hero-status[data-state="error"],
-  .hero-status[data-state="missing_credentials"] {
-    color: var(--red);
-  }
+    .hero-status {
+      color: var(--secondary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
 
-  .section {
-    margin: 0 7px;
-    padding: 0 1px;
-    background: none;
-    border: none;
-  }
+    .hero-status[data-state="error"],
+    .hero-status[data-state="missing_credentials"] {
+      color: var(--red);
+    }
 
-  .section + .section {
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--input-border);
-  }
+    .section {
+      margin: 0 7px;
+      padding: 0 1px;
+      background: none;
+      border: none;
+    }
 
-  .section-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 8px 0 0;
-  }
+    .section+.section {
+      margin-top: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--input-border);
+    }
 
-  .section-label {
-    margin: 0;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--tertiary);
-  }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 0 0;
+    }
 
-  .section-body {
-    padding: 6px 0 8px;
-  }
+    .section-label {
+      margin: 0;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--tertiary);
+    }
 
-  .top-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-  }
+    .section-body {
+      padding: 6px 0 8px;
+    }
 
-  .title {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
-  }
+    .top-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
 
-  .title[data-tone="soft"] {
-    font-size: 14px;
-    font-weight: 400;
-    letter-spacing: 0;
-  }
+    .title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
 
-  .title em {
-    font-style: italic;
-    font-weight: inherit;
-  }
+    .title[data-tone="soft"] {
+      font-size: 14px;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
 
-  .caption {
-    margin: 3px 0 0;
-    color: var(--secondary);
-    font-size: 12px;
-  }
+    .title em {
+      font-style: italic;
+      font-weight: inherit;
+    }
 
-  .code-box {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border-radius: 3px;
-    border: 1px solid var(--input-border);
-    background: rgba(0, 0, 0, 0.08);
-  }
+    .caption {
+      margin: 3px 0 0;
+      color: var(--secondary);
+      font-size: 12px;
+    }
 
-  .code-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+    .code-box {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 3px;
+      border: 1px solid var(--input-border);
+      background: rgba(0, 0, 0, 0.08);
+    }
 
-  .code-label {
-    margin: 0 0 6px;
-    color: var(--tertiary);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
+    .code-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-  .code-value {
-    width: 100%;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: none;
-    outline: none;
-    background: transparent;
-    font-family: var(--font-mono);
-    font-size: 19px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    font-variant-numeric: tabular-nums;
-    color: var(--text);
-    -webkit-appearance: none;
-    appearance: none;
-    user-select: text;
-  }
+    .code-label {
+      margin: 0 0 6px;
+      color: var(--tertiary);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
 
-  .pill-row {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 8px;
-  }
+    .code-value {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-family: var(--font-mono);
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      -webkit-appearance: none;
+      appearance: none;
+      user-select: text;
+    }
 
-  .control-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 10px;
-  }
+    .pill-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
 
-  .control-copy {
-    min-width: 0;
-  }
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 10px;
+    }
 
-  .control-label {
-    margin: 0;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-  }
+    .control-copy {
+      min-width: 0;
+    }
 
-  .control-caption {
-    margin: 2px 0 0;
-    font-size: 11px;
-    color: var(--secondary);
-  }
+    .control-label {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+    }
 
-  .media-name {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
-  }
+    .control-caption {
+      margin: 2px 0 0;
+      font-size: 11px;
+      color: var(--secondary);
+    }
 
-  .media-meta {
-    margin: 4px 0 0;
-    color: var(--secondary);
-    font-size: 12px;
-  }
+    .media-name {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
 
-  .progress-wrap {
-    margin-top: 8px;
-  }
+    .media-meta {
+      margin: 4px 0 0;
+      color: var(--secondary);
+      font-size: 12px;
+    }
 
-  .progress-bar {
-    position: relative;
-    height: 5px;
-    border-radius: 999px;
-    overflow: hidden;
-    background: var(--input-border-light);
-  }
+    .progress-wrap {
+      margin-top: 8px;
+    }
 
-  .progress-fill {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 0%;
-    border-radius: 999px;
-    background: var(--blue);
-  }
+    .progress-bar {
+      position: relative;
+      height: 5px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--input-border-light);
+    }
 
-  .progress-meta {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 6px;
-    color: var(--secondary);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-  }
+    .progress-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: 999px;
+      background: var(--blue);
+    }
 
-  .scrobble-title {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.25;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-  }
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 6px;
+      color: var(--secondary);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
 
-  .scrobble-title.is-pending::after {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: var(--blue);
-    box-shadow: 0 0 0 0 rgba(37, 97, 221, 0.34);
-    animation: traktPulse 1.4s ease-out infinite;
-  }
+    .scrobble-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
 
-  .scrobble-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .scrobble-updated {
-    flex: 0 0 auto;
-    color: var(--secondary);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
-  .scrobble-target {
-    margin: 6px 0 0;
-    color: var(--secondary);
-    font-size: 12px;
-    line-height: 1.35;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .scrobble-detail {
-    margin: 4px 0 0;
-    color: var(--secondary);
-    font-size: 12px;
-  }
-
-  .footer {
-    margin: 8px 7px 0;
-    padding: 10px 1px 0;
-    background: none;
-    border: none;
-    border-top: 1px solid var(--input-border);
-  }
-
-  .footer-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .footer-stack {
-    position: relative;
-    display: grid;
-  }
-
-  .footer-panel {
-    grid-area: 1 / 1;
-    transition: opacity 160ms ease, transform 160ms ease;
-  }
-
-  .footer-panel[aria-hidden="true"] {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-4px);
-  }
-
-  .confirm-copy {
-    margin: 0;
-    color: var(--secondary);
-    font-size: 11px;
-  }
-
-  .footer-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    min-height: 28px;
-  }
-
-  .footer-note {
-    margin: 8px 0 0;
-    color: var(--secondary);
-    font-size: 11px;
-    opacity: 0;
-    transform: translateY(-2px);
-    transition: opacity 160ms ease, transform 160ms ease;
-  }
-
-  .footer-note.show {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .provider {
-    margin: auto 7px 0;
-    padding: 14px 1px 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    color: var(--tertiary);
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .provider-copy {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .provider-logo {
-    display: block;
-    height: 12px;
-    width: auto;
-    opacity: 0.9;
-  }
-
-  .provider-version {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-
-  @keyframes traktPulse {
-    0% {
-      transform: scale(0.92);
+    .scrobble-title.is-pending::after {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--blue);
       box-shadow: 0 0 0 0 rgba(37, 97, 221, 0.34);
+      animation: traktPulse 1.4s ease-out infinite;
     }
 
-    70% {
-      transform: scale(1);
-      box-shadow: 0 0 0 7px rgba(37, 97, 221, 0);
+    .scrobble-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
     }
 
-    100% {
-      transform: scale(0.92);
-      box-shadow: 0 0 0 0 rgba(37, 97, 221, 0);
+    .scrobble-updated {
+      flex: 0 0 auto;
+      color: var(--secondary);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
-  }
 
-  button {
-    min-height: 28px;
-    padding: 0 11px;
-    border-radius: 3px;
-    border: 1px solid var(--input-border);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    color: var(--text);
-    background: var(--input-border-light);
-    touch-action: manipulation;
-    -webkit-user-select: none;
-    user-select: none;
-    transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease;
-  }
+    .scrobble-target {
+      margin: 6px 0 0;
+      color: var(--secondary);
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
-  button:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
+    .scrobble-detail {
+      margin: 4px 0 0;
+      color: var(--secondary);
+      font-size: 12px;
+    }
 
-  button.primary {
-    color: var(--highlight-text);
-    background: var(--highlight-color);
-    border-color: transparent;
-  }
+    .footer {
+      margin: 8px 7px 0;
+      padding: 10px 1px 0;
+      background: none;
+      border: none;
+      border-top: 1px solid var(--input-border);
+    }
 
-  button.secondary {
-    background: var(--input-border-light);
-  }
+    .footer-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
 
-  button.ghost {
-    color: var(--secondary);
-    background: transparent;
-  }
+    .footer-stack {
+      position: relative;
+      display: grid;
+    }
 
-  button.danger {
-    color: var(--red);
-    background: transparent;
-    border-color: rgba(255, 69, 58, 0.18);
-  }
+    .footer-panel {
+      grid-area: 1 / 1;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
 
-  button.switch {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-start;
-    min-width: 38px;
-    min-height: 22px;
-    padding: 2px;
-    border-radius: 999px;
-    border-color: var(--input-border);
-    background: rgba(120, 120, 128, 0.32);
-  }
+    .footer-panel[aria-hidden="true"] {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px);
+    }
 
-  button.switch[aria-checked="true"] {
-    background: var(--blue);
-  }
+    .confirm-copy {
+      margin: 0;
+      color: var(--secondary);
+      font-size: 11px;
+    }
 
-  button.switch[aria-checked="false"] {
-    background: rgba(120, 120, 128, 0.32);
-  }
+    .footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 28px;
+    }
 
-  .switch-thumb {
-    display: block;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    transform: translateX(0);
-    transition: transform 120ms ease;
-  }
+    .footer-note {
+      margin: 8px 0 0;
+      color: var(--secondary);
+      font-size: 11px;
+      opacity: 0;
+      transform: translateY(-2px);
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
 
-  button.switch[aria-checked="true"] .switch-thumb {
-    transform: translateX(16px);
-  }
+    .footer-note.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
 
-  .small {
-    font-size: 11px;
-    color: var(--secondary);
-  }
+    .provider {
+      margin: auto 7px 0;
+      padding: 14px 1px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--tertiary);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
 
-  [hidden] {
-    display: none !important;
-  }
-</style>
+    .provider-copy {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .provider-logo {
+      display: block;
+      height: 12px;
+      width: auto;
+      opacity: 0.9;
+    }
+
+    .provider-version {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @keyframes traktPulse {
+      0% {
+        transform: scale(0.92);
+        box-shadow: 0 0 0 0 rgba(37, 97, 221, 0.34);
+      }
+
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 7px rgba(37, 97, 221, 0);
+      }
+
+      100% {
+        transform: scale(0.92);
+        box-shadow: 0 0 0 0 rgba(37, 97, 221, 0);
+      }
+    }
+
+    button {
+      min-height: 28px;
+      padding: 0 11px;
+      border-radius: 3px;
+      border: 1px solid var(--input-border);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text);
+      background: var(--input-border-light);
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    button.primary {
+      color: var(--highlight-text);
+      background: var(--highlight-color);
+      border-color: transparent;
+    }
+
+    button.secondary {
+      background: var(--input-border-light);
+    }
+
+    button.ghost {
+      color: var(--secondary);
+      background: transparent;
+    }
+
+    button.danger {
+      color: var(--red);
+      background: transparent;
+      border-color: rgba(255, 69, 58, 0.18);
+    }
+
+    button.switch {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      min-width: 38px;
+      min-height: 22px;
+      padding: 2px;
+      border-radius: 999px;
+      border-color: var(--input-border);
+      background: rgba(120, 120, 128, 0.32);
+    }
+
+    button.switch[aria-checked="true"] {
+      background: var(--blue);
+    }
+
+    button.switch[aria-checked="false"] {
+      background: rgba(120, 120, 128, 0.32);
+    }
+
+    .switch-thumb {
+      display: block;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      transform: translateX(0);
+      transition: transform 120ms ease;
+    }
+
+    button.switch[aria-checked="true"] .switch-thumb {
+      transform: translateX(16px);
+    }
+
+    .small {
+      font-size: 11px;
+      color: var(--secondary);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+  </style>
 </head>
+
 <body>
   <div class="shell">
     <header class="header">
@@ -588,7 +590,8 @@
         <div id="device-code-box" class="code-box" hidden>
           <p class="code-label">Activation Code</p>
           <div class="code-row">
-            <input id="device-code" class="code-value" type="text" value="" readonly spellcheck="false" aria-label="Trakt activation code">
+            <input id="device-code" class="code-value" type="text" value="" readonly spellcheck="false"
+              aria-label="Trakt activation code">
             <button id="copy-code-button" class="secondary" type="button">Copy</button>
           </div>
           <p id="device-code-note" class="small">Copied to clipboard.</p>
@@ -598,7 +601,18 @@
             <p class="control-label">Scrobbling</p>
             <p id="scrobble-toggle-caption" class="control-caption">On</p>
           </div>
-          <button id="scrobble-toggle" class="switch" type="button" role="switch" aria-checked="true" aria-label="Toggle scrobbling">
+          <button id="scrobble-toggle" class="switch" type="button" role="switch" aria-checked="true"
+            aria-label="Toggle scrobbling">
+            <span class="switch-thumb"></span>
+          </button>
+        </div>
+        <div id="status-osd-control" class="control-row" hidden>
+          <div class="control-copy">
+            <p class="control-label">Show Scrobble OSD</p>
+            <p id="status-osd-toggle-caption" class="control-caption">On</p>
+          </div>
+          <button id="status-osd-toggle" class="switch" type="button" role="switch" aria-checked="true"
+            aria-label="Toggle scrobble OSD">
             <span class="switch-thumb"></span>
           </button>
         </div>
@@ -673,9 +687,10 @@
   </div>
 
   <script>
-    (function() {
+    (function () {
       var state = {
         scrobblingEnabled: true,
+        statusOsdEnabled: true,
         auth: {
           state: "disconnected",
           summary: "Not connected to Trakt",
@@ -796,7 +811,7 @@
       }
 
       function titleCase(value) {
-        return String(value || "").replace(/(^|[_\s-])([a-z])/g, function(_m, prefix, chr) {
+        return String(value || "").replace(/(^|[_\s-])([a-z])/g, function (_m, prefix, chr) {
           return (prefix === "_" ? " " : prefix) + chr.toUpperCase();
         });
       }
@@ -915,7 +930,7 @@
           return;
         }
 
-        footerNoticeTimer = setTimeout(function() {
+        footerNoticeTimer = setTimeout(function () {
           footerNotice = "";
           footerNoticeTimer = 0;
           render();
@@ -935,7 +950,7 @@
           return;
         }
 
-        copyCodeFeedbackTimer = setTimeout(function() {
+        copyCodeFeedbackTimer = setTimeout(function () {
           copyCodeFeedback = "";
           copyCodeFeedbackTimer = 0;
           render();
@@ -966,7 +981,7 @@
         var button = document.getElementById(buttonId);
         if (!button) return;
 
-        var activate = function(event) {
+        var activate = function (event) {
           if (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -976,7 +991,7 @@
 
         button.addEventListener("pointerdown", activate);
         button.addEventListener("click", activate);
-        button.addEventListener("keydown", function(event) {
+        button.addEventListener("keydown", function (event) {
           if (event.key === "Enter" || event.key === " ") {
             activate(event);
           }
@@ -987,7 +1002,7 @@
         var button = document.getElementById(buttonId);
         if (!button) return;
 
-        var activate = function(event) {
+        var activate = function (event) {
           if (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -997,7 +1012,7 @@
 
         button.addEventListener("pointerdown", activate);
         button.addEventListener("click", activate);
-        button.addEventListener("keydown", function(event) {
+        button.addEventListener("keydown", function (event) {
           if (event.key === "Enter" || event.key === " ") {
             activate(event);
           }
@@ -1008,7 +1023,7 @@
         var button = document.getElementById(buttonId);
         if (!button) return;
 
-        var activate = function(event) {
+        var activate = function (event) {
           if (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -1020,7 +1035,30 @@
 
         button.addEventListener("pointerdown", activate);
         button.addEventListener("click", activate);
-        button.addEventListener("keydown", function(event) {
+        button.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            activate(event);
+          }
+        });
+      }
+
+      function bindStatusOsdToggle(buttonId) {
+        var button = document.getElementById(buttonId);
+        if (!button) return;
+
+        var activate = function (event) {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          requestAction("toggle_status_osd", {
+            enabled: !state.statusOsdEnabled
+          });
+        };
+
+        button.addEventListener("pointerdown", activate);
+        button.addEventListener("click", activate);
+        button.addEventListener("keydown", function (event) {
           if (event.key === "Enter" || event.key === " ") {
             activate(event);
           }
@@ -1031,11 +1069,11 @@
         var input = document.getElementById(inputId);
         if (!input) return;
 
-        var selectAll = function() {
+        var selectAll = function () {
           try {
             input.focus();
             input.select();
-          } catch (_error) {}
+          } catch (_error) { }
         };
 
         input.addEventListener("focus", selectAll);
@@ -1059,11 +1097,13 @@
         var footerNote = document.getElementById("footer-note");
         var copyCodeButton = document.getElementById("copy-code-button");
         var scrobbleToggle = document.getElementById("scrobble-toggle");
+        var statusOsdToggle = document.getElementById("status-osd-toggle");
         var reauthInFlight = pendingAction === "connect" && authRequestMode === "reauth";
         var showConnectButton = !connected && !(auth.busy && authRequestMode === "reauth");
         var showFooter = connected || reauthInFlight;
         var showMainSections = connected || reauthInFlight;
         var showScrobbleControl = connected || reauthInFlight;
+        var showStatusOsdControl = connected || reauthInFlight;
 
         if (!connected || auth.busy) {
           confirmingSignout = false;
@@ -1093,9 +1133,13 @@
         scrobbleToggle.disabled = !stateReady || pendingAction === "toggle_scrobbling";
         scrobbleToggle.setAttribute("aria-checked", state.scrobblingEnabled ? "true" : "false");
         setText("scrobble-toggle-caption", state.scrobblingEnabled ? "On" : "Off");
+        statusOsdToggle.disabled = !stateReady || pendingAction === "toggle_status_osd";
+        statusOsdToggle.setAttribute("aria-checked", state.statusOsdEnabled ? "true" : "false");
+        setText("status-osd-toggle-caption", state.statusOsdEnabled ? "On" : "Off");
 
         setHidden("auth-detail", !detail);
         setHidden("scrobble-control", !showScrobbleControl);
+        setHidden("status-osd-control", !showStatusOsdControl);
         setHidden("playback-section", !showMainSections);
         setHidden("scrobble-section", !showMainSections);
         setHidden("bottom-actions", !showFooter);
@@ -1180,8 +1224,9 @@
       bindAction("connect-button", "connect");
       bindAction("reauth-button", "connect");
       bindScrobbleToggle("scrobble-toggle");
+      bindStatusOsdToggle("status-osd-toggle");
       bindSelectableInput("device-code");
-      bindLocalAction("copy-code-button", function() {
+      bindLocalAction("copy-code-button", function () {
         if (!state.auth || !state.auth.deviceCode || copyCodeBusy) {
           return;
         }
@@ -1189,22 +1234,22 @@
         render();
         send("copy_auth_code");
       });
-      bindLocalAction("signout-button", function() {
+      bindLocalAction("signout-button", function () {
         footerNotice = "";
         confirmingSignout = true;
         render();
       });
-      bindLocalAction("signout-cancel-button", function() {
+      bindLocalAction("signout-cancel-button", function () {
         confirmingSignout = false;
         render();
       });
-      bindLocalAction("signout-confirm-button", function() {
+      bindLocalAction("signout-confirm-button", function () {
         confirmingSignout = false;
         requestAction("signout");
       });
 
       if (window.iina && typeof iina.onMessage === "function") {
-        iina.onMessage("state", function(payload) {
+        iina.onMessage("state", function (payload) {
           var nextState = payload || state;
           var nextAuth = nextState.auth || {};
           var authCompleted = authRequestMode && !nextAuth.busy;
@@ -1234,7 +1279,7 @@
 
           render();
         });
-        iina.onMessage("copy_auth_result", function(payload) {
+        iina.onMessage("copy_auth_result", function (payload) {
           copyCodeBusy = false;
           if (payload && payload.ok) {
             showCopyCodeFeedback("Code copied.");
@@ -1245,7 +1290,7 @@
       }
 
       render();
-      setInterval(function() {
+      setInterval(function () {
         if (!state.scrobble || !state.scrobble.updatedAt) return;
         renderScrobble();
       }, 1000);
@@ -1253,4 +1298,5 @@
     })();
   </script>
 </body>
+
 </html>
