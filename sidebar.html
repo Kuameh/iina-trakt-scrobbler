@@ -371,6 +371,42 @@
       font-size: 12px;
     }
 
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .history-title {
+      margin: 0;
+      min-width: 0;
+      flex: 1 1 auto;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .history-time {
+      flex: 0 0 auto;
+      color: var(--secondary);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .history-empty {
+      margin: 0;
+      color: var(--secondary);
+      font-size: 12px;
+    }
+
     .footer {
       margin: 8px 7px 0;
       padding: 10px 1px 0;
@@ -653,6 +689,16 @@
       </div>
     </section>
 
+    <section id="history-section" class="section">
+      <div class="section-head">
+        <p class="section-label">Watch History</p>
+      </div>
+      <div class="section-body">
+        <div id="history-list" class="history-list" hidden></div>
+        <p id="history-empty" class="history-empty">No watched history in the last 24 hours.</p>
+      </div>
+    </section>
+
     <footer id="bottom-actions" class="footer" hidden>
       <div class="footer-stack">
         <div id="footer-default" class="footer-panel" aria-hidden="false">
@@ -722,6 +768,11 @@
           detail: "No scrobble has been attempted in this window yet.",
           progress: null,
           updatedAt: ""
+        },
+        history: {
+          items: [],
+          fetchedAt: "",
+          error: ""
         },
         app: {
           version: ""
@@ -1142,6 +1193,7 @@
         setHidden("status-osd-control", !showStatusOsdControl);
         setHidden("playback-section", !showMainSections);
         setHidden("scrobble-section", !showMainSections);
+        setHidden("history-section", !showMainSections);
         setHidden("bottom-actions", !showFooter);
         setHidden("device-code-box", !hasCode);
         footerDefault.setAttribute("aria-hidden", confirmingSignout ? "true" : "false");
@@ -1208,6 +1260,46 @@
         setHidden("scrobble-detail", !detail);
       }
 
+      function renderHistory() {
+        var history = state.history || {};
+        var items = Array.isArray(history.items) ? history.items : [];
+        var list = document.getElementById("history-list");
+        var empty = document.getElementById("history-empty");
+
+        if (!list || !empty) {
+          return;
+        }
+
+        list.textContent = "";
+
+        if (!items.length) {
+          empty.textContent = history.error ? "History unavailable." : "No watched history in the last 24 hours.";
+          setHidden("history-list", true);
+          setHidden("history-empty", false);
+          return;
+        }
+
+        items.forEach(function(item) {
+          var row = document.createElement("div");
+          row.className = "history-item";
+
+          var title = document.createElement("p");
+          title.className = "history-title";
+          title.textContent = item.label || "Unknown item";
+
+          var time = document.createElement("span");
+          time.className = "history-time";
+          time.textContent = formatUpdatedAt(item.watchedAt);
+
+          row.appendChild(title);
+          row.appendChild(time);
+          list.appendChild(row);
+        });
+
+        setHidden("history-list", false);
+        setHidden("history-empty", true);
+      }
+
       function renderProvider() {
         var version = state.app && state.app.version ? ("v" + state.app.version) : "";
         setText("provider-version", version);
@@ -1218,6 +1310,7 @@
         renderAuth();
         renderPlayback();
         renderScrobble();
+        renderHistory();
         renderProvider();
       }
 

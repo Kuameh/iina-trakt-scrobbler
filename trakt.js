@@ -13,6 +13,9 @@ var AUTH_COOLDOWN_MS = 30000;
 var TOKEN_REFRESH_MARGIN_SECONDS = 60;
 var SEARCH_SCORE_THRESHOLD = 5;
 var PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
+var HISTORY_CACHE_TTL_MS = 60 * 1000;
+var HISTORY_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+var HISTORY_LIMIT = 12;
 var AUTH_REQUIRED_ERROR = "Trakt authorization required";
 
 var runtime = {
@@ -31,7 +34,9 @@ var runtime = {
   lastAuthFailureMessage: "",
   loggedCredentialMode: false,
   viewerProfile: null,
-  viewerProfileFetchedAt: 0
+  viewerProfileFetchedAt: 0,
+  recentHistory: null,
+  recentHistoryFetchedAt: 0
 };
 
 function configure(options) {
@@ -136,6 +141,11 @@ function clearViewerProfileCache() {
   runtime.viewerProfileFetchedAt = 0;
 }
 
+function clearRecentHistoryCache() {
+  runtime.recentHistory = null;
+  runtime.recentHistoryFetchedAt = 0;
+}
+
 function getTokenInfo() {
   var token = loadToken();
   if (!token || !token.access_token) {
@@ -213,6 +223,7 @@ function loadToken() {
 function saveToken(token) {
   runtime.tokenCache = token || null;
   clearViewerProfileCache();
+  clearRecentHistoryCache();
   var rawValue = JSON.stringify(runtime.tokenCache || {});
   if (!writeTokenToKeychain(rawValue)) {
     log("Warning: keychain write failed, falling back to @data token storage");
@@ -229,6 +240,7 @@ function clearToken() {
   runtime.authCode = "";
   runtime.authUrl = "";
   clearViewerProfileCache();
+  clearRecentHistoryCache();
   writeTokenToKeychain("");
   if (runtime.file) {
     runtime.file.write(TOKEN_FALLBACK_PATH, "");
@@ -495,6 +507,120 @@ function normalizeViewerProfile(body) {
     vip: !!((user && user.vip) || (payload.account && payload.account.vip)),
     joinedAt: joinedAt || ""
   };
+}
+
+function pad2(value) {
+  return String(Number(value || 0)).padStart(2, "0");
+}
+
+function normalizeHistoryItem(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  var type = String(entry.type || "").trim();
+  var watchedAt = String(entry.watched_at || "").trim();
+  var historyId = Number(entry.id || 0);
+  var label = "";
+
+  if (type === "movie" && entry.movie) {
+    label = String(entry.movie.title || "").trim();
+    if (entry.movie.year) {
+      label += " (" + entry.movie.year + ")";
+    }
+  } else if (type === "episode") {
+    var showTitle = entry.show && entry.show.title ? String(entry.show.title).trim() : "";
+    var episode = entry.episode || {};
+    var episodeCode = "S" + pad2(episode.season) + "E" + pad2(episode.number);
+    var episodeTitle = String(episode.title || "").trim();
+    label = (showTitle ? (showTitle + " ") : "") + episodeCode;
+    if (episodeTitle) {
+      label += " - " + episodeTitle;
+    }
+  } else if (type === "show" && entry.show) {
+    label = String(entry.show.title || "").trim();
+  }
+
+  if (!label) {
+    return null;
+  }
+
+  return {
+    id: historyId || 0,
+    type: type || "unknown",
+    label: label,
+    watchedAt: watchedAt
+  };
+}
+
+async function getRecentHistory(options) {
+  var settings = options || {};
+  var authStatus = getAuthStatus();
+  if (!authStatus.connected) {
+    return {
+      items: [],
+      fetchedAt: ""
+    };
+  }
+
+  if (
+    !settings.force &&
+    runtime.recentHistory &&
+    runtime.recentHistoryFetchedAt &&
+    (Date.now() - runtime.recentHistoryFetchedAt) < HISTORY_CACHE_TTL_MS
+  ) {
+    return runtime.recentHistory;
+  }
+
+  var response;
+  try {
+    response = await authedRequest("GET", "/users/me/history", {
+      query: {
+        start_at: new Date(Date.now() - HISTORY_LOOKBACK_MS).toISOString(),
+        page: 1,
+        limit: settings.limit || HISTORY_LIMIT
+      }
+    });
+  } catch (error) {
+    if (isAuthRequiredError(error)) {
+      return {
+        items: [],
+        fetchedAt: "",
+        error: ""
+      };
+    }
+    runtime.recentHistory = {
+      items: [],
+      fetchedAt: "",
+      error: String(error && error.message ? error.message : error)
+    };
+    runtime.recentHistoryFetchedAt = Date.now();
+    log("Recent Trakt history unavailable: " + runtime.recentHistory.error);
+    return runtime.recentHistory;
+  }
+
+  if (response.statusCode >= 400) {
+    runtime.recentHistory = {
+      items: [],
+      fetchedAt: "",
+      error: response.body.error_description || response.body.error || "Failed to load Trakt history"
+    };
+    runtime.recentHistoryFetchedAt = Date.now();
+    log("Recent Trakt history unavailable: " + runtime.recentHistory.error);
+    return runtime.recentHistory;
+  }
+
+  var items = Array.isArray(response.body)
+    ? response.body.map(normalizeHistoryItem).filter(Boolean)
+    : [];
+
+  runtime.recentHistory = {
+    items: items,
+    fetchedAt: new Date().toISOString(),
+    error: ""
+  };
+  runtime.recentHistoryFetchedAt = Date.now();
+  return runtime.recentHistory;
 }
 
 async function getViewerProfile(options) {
@@ -1187,7 +1313,9 @@ module.exports = {
   beginInteractiveAuth: beginInteractiveAuth,
   configure: configure,
   clearToken: clearToken,
+  clearRecentHistoryCache: clearRecentHistoryCache,
   getAuthStatus: getAuthStatus,
+  getRecentHistory: getRecentHistory,
   getTokenInfo: getTokenInfo,
   getViewerProfile: getViewerProfile,
   hasCredentials: hasCredentials,

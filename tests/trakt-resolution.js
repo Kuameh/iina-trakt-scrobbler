@@ -461,6 +461,68 @@ async function run() {
     }));
   });
 
+  await test("loads and caches recent Trakt history", async function() {
+    const store = {};
+    const logs = [];
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt, calls } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/users/me/history") {
+        return {
+          statusCode: 200,
+          body: [
+            {
+              id: 101,
+              type: "episode",
+              watched_at: "2026-05-05T00:00:00.000Z",
+              show: {
+                title: "Game Changer"
+              },
+              episode: {
+                season: 7,
+                number: 9,
+                title: "Who Wants to Be"
+              }
+            },
+            {
+              id: 202,
+              type: "movie",
+              watched_at: "2026-05-04T20:00:00.000Z",
+              movie: {
+                title: "Big Fat Liar",
+                year: 2002
+              }
+            }
+          ]
+        };
+      }
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    const first = await trakt.getRecentHistory();
+    const second = await trakt.getRecentHistory();
+
+    assert.deepStrictEqual(first.items, [
+      {
+        id: 101,
+        type: "episode",
+        label: "Game Changer S07E09 - Who Wants to Be",
+        watchedAt: "2026-05-05T00:00:00.000Z"
+      },
+      {
+        id: 202,
+        type: "movie",
+        label: "Big Fat Liar (2002)",
+        watchedAt: "2026-05-04T20:00:00.000Z"
+      }
+    ]);
+    assert.strictEqual(first.error, "");
+    assert.deepStrictEqual(second.items, first.items);
+    assert.strictEqual(calls.filter(function(call) {
+      return call.indexOf("GET /users/me/history") === 0;
+    }).length, 1);
+  });
+
   console.log("trakt resolution tests passed");
 }
 

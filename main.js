@@ -359,6 +359,11 @@ function buildSidebarPlayback() {
 async function buildSidebarPayload(forceProfileRefresh) {
   var auth = persistAuthStatus();
   var viewerProfile = null;
+  var recentHistory = {
+    items: [],
+    fetchedAt: "",
+    error: ""
+  };
 
   if (auth.connected && typeof trakt.getViewerProfile === "function") {
     try {
@@ -368,6 +373,12 @@ async function buildSidebarPayload(forceProfileRefresh) {
     } catch (error) {
       log("Sidebar profile refresh failed: " + errStr(error));
     }
+  }
+
+  if (auth.connected && typeof trakt.getRecentHistory === "function") {
+    recentHistory = await trakt.getRecentHistory({
+      force: !!forceProfileRefresh
+    });
   }
 
   return {
@@ -390,6 +401,7 @@ async function buildSidebarPayload(forceProfileRefresh) {
     },
     playback: buildSidebarPlayback(),
     scrobble: cloneScrobbleStatus(lastScrobbleStatus),
+    history: recentHistory,
     generatedAt: new Date().toISOString()
   };
 }
@@ -973,6 +985,9 @@ function queueScrobble(verb, snapshot) {
           " succeeded for " + mediaLabel(payload.mediaInfo) +
           " (action=" + traktAction + ", progress=" + traktProgress.toFixed(2) + "%)"
         );
+        if (traktAction === "scrobble" && trakt && typeof trakt.clearRecentHistoryCache === "function") {
+          trakt.clearRecentHistoryCache();
+        }
         maybeShowScrobbleStatusOsd(effectiveVerb, traktAction, payload.mediaInfo);
         if (!firstScrobbleNoticeShown) {
           debugOsd("Scrobble flow active");
