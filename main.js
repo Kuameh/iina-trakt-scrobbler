@@ -3,7 +3,7 @@ const { core, event, file, preferences, utils, sidebar, menu } = iina;
 var parser = require("./parser.iina.js");
 var monitor = require("./monitor.js");
 var trakt = require("./trakt.js");
-var PLUGIN_VERSION = "0.1.35";
+var PLUGIN_VERSION = "0.1.36";
 var DEBUG_LOG_PATH = "@data/debug.log";
 var MAX_DEBUG_LOG_CHARS = 200000;
 var POLL_INTERVAL_MS = 2000;
@@ -24,6 +24,7 @@ var lastAuthStatusSignature = "";
 var authActionChain = Promise.resolve();
 var sidebarRefreshChain = Promise.resolve();
 var lastScrobbleStatus = createScrobbleStatus();
+var correctionState = createCorrectionState();
 
 function createPlaybackState() {
   return {
@@ -48,6 +49,19 @@ function createScrobbleStatus() {
     reason: "",
     progress: null,
     updatedAt: ""
+  };
+}
+
+function createCorrectionState() {
+  return {
+    active: false,
+    busy: false,
+    query: "",
+    reference: "",
+    error: "",
+    mediaLabel: "",
+    mediaKey: "",
+    results: []
   };
 }
 
@@ -295,6 +309,32 @@ function cloneScrobbleStatus(status) {
   };
 }
 
+function cloneCorrectionState(state) {
+  var source = state || createCorrectionState();
+  return {
+    active: !!source.active,
+    busy: !!source.busy,
+    query: String(source.query || ""),
+    reference: String(source.reference || ""),
+    error: String(source.error || ""),
+    mediaLabel: String(source.mediaLabel || ""),
+    mediaKey: String(source.mediaKey || ""),
+    results: Array.isArray(source.results)
+      ? source.results.map(function(result) {
+          return {
+            trakt: Number(result.trakt || 0),
+            kind: String(result.kind || ""),
+            title: String(result.title || ""),
+            subtitle: String(result.subtitle || ""),
+            detail: String(result.detail || ""),
+            year: result.year ? Number(result.year) : null,
+            posterUrl: String(result.posterUrl || "")
+          };
+        })
+      : []
+  };
+}
+
 function setScrobbleStatus(values) {
   var incoming = values || {};
   var next = Object.assign({}, lastScrobbleStatus, incoming);
@@ -359,6 +399,7 @@ function buildSidebarPlayback() {
 async function buildSidebarPayload(forceProfileRefresh) {
   var auth = persistAuthStatus();
   var viewerProfile = null;
+  var correction = cloneCorrectionState(correctionState);
   var recentHistory = {
     items: [],
     fetchedAt: "",
@@ -375,7 +416,7 @@ async function buildSidebarPayload(forceProfileRefresh) {
     }
   }
 
-  if (auth.connected && typeof trakt.getRecentHistory === "function") {
+  if (auth.connected && !correction.active && typeof trakt.getRecentHistory === "function") {
     recentHistory = await trakt.getRecentHistory({
       force: !!forceProfileRefresh
     });
@@ -401,6 +442,7 @@ async function buildSidebarPayload(forceProfileRefresh) {
     },
     playback: buildSidebarPlayback(),
     scrobble: cloneScrobbleStatus(lastScrobbleStatus),
+    correction: correction,
     history: recentHistory,
     generatedAt: new Date().toISOString()
   };
@@ -494,6 +536,80 @@ function bindSidebarMessaging() {
       } catch (_error) {}
     });
   });
+
+  sidebar.onMessage("open_correction", function(payload) {
+    var query = payload && payload.query ? String(payload.query) : "";
+    log("Sidebar requested correction search");
+    authActionChain = authActionChain.then(function() {
+      return openCorrectionFlow(query);
+    }).catch(function(error) {
+      log("Sidebar correction open failed: " + errStr(error));
+      correctionState = Object.assign(cloneCorrectionState(correctionState), {
+        active: true,
+        busy: false,
+        error: errStr(error)
+      });
+      queueSidebarRefresh(false);
+    });
+  });
+
+  sidebar.onMessage("search_correction", function(payload) {
+    var query = payload && payload.query ? String(payload.query) : "";
+    log('Sidebar requested correction search query="' + query + '"');
+    authActionChain = authActionChain.then(function() {
+      return searchCorrectionFlow(query);
+    }).catch(function(error) {
+      log("Sidebar correction search failed: " + errStr(error));
+      correctionState = Object.assign(cloneCorrectionState(correctionState), {
+        active: true,
+        busy: false,
+        error: errStr(error)
+      });
+      queueSidebarRefresh(false);
+    });
+  });
+
+  sidebar.onMessage("lookup_correction_reference", function(payload) {
+    var reference = payload && payload.reference ? String(payload.reference) : "";
+    log('Sidebar requested correction reference lookup="' + reference + '"');
+    authActionChain = authActionChain.then(function() {
+      return lookupCorrectionReference(reference);
+    }).catch(function(error) {
+      log("Sidebar correction reference lookup failed: " + errStr(error));
+      correctionState = Object.assign(cloneCorrectionState(correctionState), {
+        active: true,
+        busy: false,
+        error: errStr(error)
+      });
+      queueSidebarRefresh(false);
+    });
+  });
+
+  sidebar.onMessage("close_correction", function() {
+    log("Sidebar requested correction close");
+    resetCorrectionState();
+    queueSidebarRefresh(false);
+  });
+
+  sidebar.onMessage("choose_correction", function(payload) {
+    var traktId = payload && payload.trakt ? Number(payload.trakt) : 0;
+    if (!traktId) {
+      return;
+    }
+
+    log("Sidebar requested correction apply " + traktId);
+    authActionChain = authActionChain.then(function() {
+      return applyCorrectionChoice(traktId);
+    }).catch(function(error) {
+      log("Sidebar correction apply failed: " + errStr(error));
+      correctionState = Object.assign(cloneCorrectionState(correctionState), {
+        active: true,
+        busy: false,
+        error: errStr(error)
+      });
+      queueSidebarRefresh(false);
+    });
+  });
 }
 
 function initializeSidebar() {
@@ -561,10 +677,235 @@ async function runManualAuth(force) {
 function handleManualSignOut() {
   trakt.signOut();
   authRequiredNoticeShown = false;
+  resetCorrectionState();
   persistAuthStatus();
   queueSidebarRefresh(true);
   importantOsd("Trakt signed out");
   log("Trakt token cleared");
+}
+
+async function openCorrectionFlow(query) {
+  if (!currentMedia || !currentMedia.mediaInfo) {
+    return;
+  }
+
+  var resolvedQuery = String(query || defaultCorrectionQuery(currentMedia.mediaInfo)).trim();
+  correctionState = {
+    active: true,
+    busy: false,
+    query: resolvedQuery,
+    reference: "",
+    error: "",
+    mediaLabel: correctionMediaLabel(),
+    mediaKey: currentMediaKey(),
+    results: []
+  };
+  queueSidebarRefresh(false);
+  await searchCorrectionFlow(resolvedQuery);
+}
+
+async function searchCorrectionFlow(query) {
+  if (!currentMedia || !currentMedia.mediaInfo) {
+    resetCorrectionState();
+    queueSidebarRefresh(false);
+    return;
+  }
+
+  var resolvedQuery = String(query || "").trim();
+  if (!resolvedQuery) {
+    correctionState = Object.assign(cloneCorrectionState(correctionState), {
+      active: true,
+      busy: false,
+      query: "",
+      error: "Enter a title to search.",
+      mediaLabel: correctionMediaLabel(),
+      mediaKey: currentMediaKey(),
+      results: []
+    });
+    queueSidebarRefresh(false);
+    return;
+  }
+
+  var mediaKey = currentMediaKey();
+  correctionState = Object.assign(cloneCorrectionState(correctionState), {
+    active: true,
+    busy: true,
+    query: resolvedQuery,
+    error: "",
+    mediaLabel: correctionMediaLabel(),
+    mediaKey: mediaKey,
+    results: []
+  });
+  queueSidebarRefresh(false);
+
+  try {
+    var results = await trakt.searchCorrectionCandidates(currentMedia.mediaInfo, resolvedQuery, 8);
+    if (mediaKey !== currentMediaKey()) {
+      return;
+    }
+
+    correctionState = Object.assign(cloneCorrectionState(correctionState), {
+      active: true,
+      busy: false,
+      query: resolvedQuery,
+      error: results.length ? "" : "No Trakt matches found.",
+      mediaLabel: correctionMediaLabel(),
+      mediaKey: mediaKey,
+      results: results
+    });
+    log("Correction search returned " + results.length + " result(s) for " + correctionMediaLabel());
+  } catch (error) {
+    if (mediaKey !== currentMediaKey()) {
+      return;
+    }
+
+    correctionState = Object.assign(cloneCorrectionState(correctionState), {
+      active: true,
+      busy: false,
+      query: resolvedQuery,
+      error: errStr(error),
+      mediaLabel: correctionMediaLabel(),
+      mediaKey: mediaKey,
+      results: []
+    });
+    log("Correction search failed: " + errStr(error));
+  }
+
+  queueSidebarRefresh(false);
+}
+
+async function lookupCorrectionReference(reference) {
+  if (!currentMedia || !currentMedia.mediaInfo) {
+    resetCorrectionState();
+    queueSidebarRefresh(false);
+    return;
+  }
+
+  var resolvedReference = String(reference || "").trim();
+  if (!resolvedReference) {
+    correctionState = Object.assign(cloneCorrectionState(correctionState), {
+      active: true,
+      busy: false,
+      reference: "",
+      error: "Enter a Trakt ID or slug.",
+      mediaLabel: correctionMediaLabel(),
+      mediaKey: currentMediaKey()
+    });
+    queueSidebarRefresh(false);
+    return;
+  }
+
+  var mediaKey = currentMediaKey();
+  correctionState = Object.assign(cloneCorrectionState(correctionState), {
+    active: true,
+    busy: true,
+    reference: resolvedReference,
+    error: "",
+    mediaLabel: correctionMediaLabel(),
+    mediaKey: mediaKey
+  });
+  queueSidebarRefresh(false);
+
+  try {
+    var result = await trakt.lookupCorrectionReference(currentMedia.mediaInfo, resolvedReference);
+    if (mediaKey !== currentMediaKey()) {
+      return;
+    }
+
+    correctionState = Object.assign(cloneCorrectionState(correctionState), {
+      active: true,
+      busy: false,
+      reference: resolvedReference,
+      error: result ? "" : "No Trakt match found for that ID or slug.",
+      mediaLabel: correctionMediaLabel(),
+      mediaKey: mediaKey,
+      results: result ? [result] : []
+    });
+
+    if (result) {
+      log(
+        "Correction reference lookup resolved " +
+          resolvedReference +
+          " -> " +
+          correctionResultLabel(result, currentMedia.mediaInfo)
+      );
+    }
+  } catch (error) {
+    if (mediaKey !== currentMediaKey()) {
+      return;
+    }
+
+    correctionState = Object.assign(cloneCorrectionState(correctionState), {
+      active: true,
+      busy: false,
+      reference: resolvedReference,
+      error: errStr(error),
+      mediaLabel: correctionMediaLabel(),
+      mediaKey: mediaKey
+    });
+    log("Correction reference lookup failed: " + errStr(error));
+  }
+
+  queueSidebarRefresh(false);
+}
+
+async function applyCorrectionChoice(traktId) {
+  if (!currentMedia || !currentMedia.mediaInfo) {
+    return;
+  }
+
+  var mediaInfo = cloneMediaInfo(currentMedia.mediaInfo);
+  var mediaKey = currentMediaKey();
+  var chosenId = Number(traktId || 0);
+  if (!chosenId) {
+    return;
+  }
+
+  correctionState = Object.assign(cloneCorrectionState(correctionState), {
+    active: true,
+    busy: true,
+    error: ""
+  });
+  queueSidebarRefresh(false);
+
+  try {
+    var chosenResult = (correctionState.results || []).find(function(result) {
+      return Number(result.trakt || 0) === chosenId;
+    }) || null;
+    await trakt.applyMatchOverride(mediaInfo, chosenId);
+    if (mediaKey !== currentMediaKey()) {
+      return;
+    }
+
+    if (currentMedia) {
+      currentMedia.traktTargetLabel = correctionResultLabel(chosenResult, mediaInfo);
+    }
+    log("Applied manual Trakt match " + chosenId + " for " + mediaLabel(mediaInfo));
+    resetCorrectionState();
+    playbackState.lastScrobbleKey = "";
+    setScrobbleStatus({
+      status: "ready",
+      verb: "",
+      mediaLabel: currentMedia ? scrobbleTargetLabel(currentMedia) : correctionResultLabel(chosenResult, mediaInfo),
+      detail: "Watching for playback changes.",
+      reason: ""
+    });
+    queueSidebarRefresh(true);
+    resyncCurrentPlayback("Re-syncing current playback after manual correction");
+    importantOsd("Trakt match corrected");
+  } catch (error) {
+    if (mediaKey !== currentMediaKey()) {
+      return;
+    }
+
+    correctionState = Object.assign(cloneCorrectionState(correctionState), {
+      active: true,
+      busy: false,
+      error: errStr(error)
+    });
+    queueSidebarRefresh(false);
+    log("Applying manual Trakt match failed: " + errStr(error));
+  }
 }
 
 function checkAuthActionRequest() {
@@ -657,6 +998,49 @@ function mediaLabel(mediaInfo) {
   return mediaInfo.title + (mediaInfo.year ? (" (" + mediaInfo.year + ")") : "");
 }
 
+function correctionResultLabel(result, mediaInfo) {
+  if (!result) return "";
+  if (result.kind === "episode") {
+    var suffix = mediaInfo && mediaInfo.episodeTitle ? (" - " + mediaInfo.episodeTitle) : "";
+    return String(result.title || "") +
+      " S" + pad2(mediaInfo && mediaInfo.season) +
+      "E" + pad2(mediaInfo && mediaInfo.episode) +
+      suffix;
+  }
+
+  return String(result.title || "") + (result.year ? (" (" + result.year + ")") : "");
+}
+
+function labelFromTraktScrobbleBody(body, mediaInfo) {
+  var payload = body || {};
+
+  if (payload.movie && payload.movie.title) {
+    return String(payload.movie.title) + (payload.movie.year ? (" (" + payload.movie.year + ")") : "");
+  }
+
+  if (payload.show && payload.show.title) {
+    var episodeTitle = payload.episode && payload.episode.title
+      ? String(payload.episode.title)
+      : String((mediaInfo && mediaInfo.episodeTitle) || "");
+    return String(payload.show.title) +
+      " S" + pad2(payload.episode && payload.episode.season ? payload.episode.season : (mediaInfo && mediaInfo.season)) +
+      "E" + pad2(payload.episode && payload.episode.number ? payload.episode.number : (mediaInfo && mediaInfo.episode)) +
+      (episodeTitle ? (" - " + episodeTitle) : "");
+  }
+
+  return "";
+}
+
+function scrobbleTargetLabel(snapshot) {
+  if (!snapshot) return "";
+  return String(snapshot.traktTargetLabel || "") || mediaLabel(snapshot.mediaInfo);
+}
+
+function correctionMediaLabel() {
+  if (!currentMedia || !currentMedia.mediaInfo) return "";
+  return scrobbleTargetLabel(currentMedia);
+}
+
 function cloneMediaInfo(mediaInfo) {
   if (!mediaInfo) return null;
   return {
@@ -670,6 +1054,24 @@ function cloneMediaInfo(mediaInfo) {
   };
 }
 
+function currentMediaKey() {
+  return currentMedia && currentMedia.mediaInfo
+    ? monitor.mediaKey(currentMedia.mediaInfo)
+    : "";
+}
+
+function defaultCorrectionQuery(mediaInfo) {
+  if (!mediaInfo) return "";
+  if (mediaInfo.type === "episode") {
+    return String(mediaInfo.showTitle || mediaInfo.title || "").trim();
+  }
+  return String(mediaInfo.title || "").trim();
+}
+
+function resetCorrectionState() {
+  correctionState = createCorrectionState();
+}
+
 function cloneSnapshot(snapshot) {
   if (!snapshot) return null;
   return {
@@ -678,7 +1080,8 @@ function cloneSnapshot(snapshot) {
     position: snapshot.position,
     progress: snapshot.progress,
     updatedAt: snapshot.updatedAt,
-    mediaInfo: cloneMediaInfo(snapshot.mediaInfo)
+    mediaInfo: cloneMediaInfo(snapshot.mediaInfo),
+    traktTargetLabel: String(snapshot.traktTargetLabel || "")
   };
 }
 
@@ -742,6 +1145,7 @@ function identifyCurrentMedia() {
     source: source,
     parsed: parsed,
     mediaInfo: mediaInfoFromParsed(parsed),
+    traktTargetLabel: "",
     identifiedAt: new Date().toISOString()
   } : null;
 
@@ -828,7 +1232,8 @@ function buildLiveSnapshot() {
     position: position,
     progress: monitor.computeProgress(position, duration),
     updatedAt: Date.now() / 1000,
-    mediaInfo: cloneMediaInfo(currentMedia.mediaInfo)
+    mediaInfo: cloneMediaInfo(currentMedia.mediaInfo),
+    traktTargetLabel: String(currentMedia.traktTargetLabel || "")
   };
 }
 
@@ -840,7 +1245,8 @@ function buildStoppedSnapshot(prevSnapshot) {
     position: prevSnapshot.position,
     progress: prevSnapshot.progress,
     updatedAt: Date.now() / 1000,
-    mediaInfo: cloneMediaInfo(prevSnapshot.mediaInfo)
+    mediaInfo: cloneMediaInfo(prevSnapshot.mediaInfo),
+    traktTargetLabel: String(prevSnapshot.traktTargetLabel || "")
   };
 }
 
@@ -942,7 +1348,7 @@ function queueScrobble(verb, snapshot) {
   setScrobbleStatus({
     status: "queued",
     verb: effectiveVerb,
-    mediaLabel: mediaLabel(payload.mediaInfo),
+    mediaLabel: scrobbleTargetLabel(payload),
     detail: "Queued for Trakt at " + payload.progress.toFixed(2) + "%.",
     reason: "",
     progress: payload.progress
@@ -951,16 +1357,16 @@ function queueScrobble(verb, snapshot) {
     log(
       "Scrobble " + verb +
       " normalized to " + effectiveVerb +
-      " for " + mediaLabel(payload.mediaInfo) +
+      " for " + scrobbleTargetLabel(payload) +
       " at " + payload.progress.toFixed(2) + "%"
     );
   }
-  log("Scrobble " + effectiveVerb + " queued for " + mediaLabel(payload.mediaInfo) + " at " + payload.progress.toFixed(2) + "%");
+  log("Scrobble " + effectiveVerb + " queued for " + scrobbleTargetLabel(payload) + " at " + payload.progress.toFixed(2) + "%");
   playbackState.scrobbleChain = playbackState.scrobbleChain.then(async function() {
     setScrobbleStatus({
       status: "sending",
       verb: effectiveVerb,
-      mediaLabel: mediaLabel(payload.mediaInfo),
+      mediaLabel: scrobbleTargetLabel(payload),
       detail: "Sending " + effectiveVerb + " to Trakt.",
       reason: "",
       progress: payload.progress
@@ -971,18 +1377,26 @@ function queueScrobble(verb, snapshot) {
       if (result && result.ok) {
         var traktAction = successfulScrobbleAction(effectiveVerb, result);
         var traktProgress = successfulScrobbleProgress(payload.progress, result);
+        var matchedLabel = labelFromTraktScrobbleBody(result.body, payload.mediaInfo) || scrobbleTargetLabel(payload);
+        if (
+          currentMedia &&
+          currentMedia.mediaInfo &&
+          monitor.mediaKey(currentMedia.mediaInfo) === monitor.mediaKey(payload.mediaInfo)
+        ) {
+          currentMedia.traktTargetLabel = matchedLabel;
+        }
         setScrobbleStatus({
           status: "succeeded",
           verb: effectiveVerb,
           action: traktAction,
-          mediaLabel: mediaLabel(payload.mediaInfo),
+          mediaLabel: matchedLabel,
           detail: successfulScrobbleDetail(traktAction, traktProgress),
           reason: "",
           progress: traktProgress
         });
         log(
           "Scrobble " + effectiveVerb +
-          " succeeded for " + mediaLabel(payload.mediaInfo) +
+          " succeeded for " + matchedLabel +
           " (action=" + traktAction + ", progress=" + traktProgress.toFixed(2) + "%)"
         );
         if (traktAction === "scrobble" && trakt && typeof trakt.clearRecentHistoryCache === "function") {
@@ -1008,14 +1422,14 @@ function queueScrobble(verb, snapshot) {
         setScrobbleStatus({
           status: "skipped",
           verb: effectiveVerb,
-          mediaLabel: mediaLabel(payload.mediaInfo),
+          mediaLabel: scrobbleTargetLabel(payload),
           reason: result.reason,
           detail: result.reason === "auth-required"
             ? "Scrobble skipped until you connect Trakt from the sidebar."
             : ("Scrobble skipped: " + result.reason),
           progress: payload.progress
         });
-        log("Scrobble skipped for " + mediaLabel(payload.mediaInfo) + ": " + result.reason);
+        log("Scrobble skipped for " + scrobbleTargetLabel(payload) + ": " + result.reason);
         return;
       }
 
@@ -1023,12 +1437,12 @@ function queueScrobble(verb, snapshot) {
         setScrobbleStatus({
           status: "duplicate",
           verb: effectiveVerb,
-          mediaLabel: mediaLabel(payload.mediaInfo),
+          mediaLabel: scrobbleTargetLabel(payload),
           detail: "Trakt reported this scrobble as a duplicate.",
           reason: "",
           progress: payload.progress
         });
-        log("Scrobble duplicate ignored for " + mediaLabel(payload.mediaInfo));
+        log("Scrobble duplicate ignored for " + scrobbleTargetLabel(payload));
         return;
       }
 
@@ -1036,34 +1450,34 @@ function queueScrobble(verb, snapshot) {
         setScrobbleStatus({
           status: "unmatched",
           verb: effectiveVerb,
-          mediaLabel: mediaLabel(payload.mediaInfo),
+          mediaLabel: scrobbleTargetLabel(payload),
           detail: "Trakt could not match this media identity.",
           reason: "missing-trakt-match",
           progress: payload.progress
         });
-        log("Trakt rejected the scrobble because the media was not found: " + mediaLabel(payload.mediaInfo));
+        log("Trakt rejected the scrobble because the media was not found: " + scrobbleTargetLabel(payload));
         return;
       }
 
       setScrobbleStatus({
         status: "unknown",
         verb: effectiveVerb,
-        mediaLabel: mediaLabel(payload.mediaInfo),
+        mediaLabel: scrobbleTargetLabel(payload),
         detail: "Trakt returned no actionable result.",
         reason: "",
         progress: payload.progress
       });
-      log("Scrobble returned no actionable result for " + mediaLabel(payload.mediaInfo));
+      log("Scrobble returned no actionable result for " + scrobbleTargetLabel(payload));
     } catch (error) {
       setScrobbleStatus({
         status: "failed",
         verb: effectiveVerb,
-        mediaLabel: mediaLabel(payload.mediaInfo),
+        mediaLabel: scrobbleTargetLabel(payload),
         detail: errStr(error),
         reason: "",
         progress: payload.progress
       });
-      log("Scrobble failed for " + mediaLabel(payload.mediaInfo) + ": " + errStr(error));
+      log("Scrobble failed for " + scrobbleTargetLabel(payload) + ": " + errStr(error));
       if (/Missing Trakt client credentials/.test(errStr(error)) && !missingCredentialsNoticeShown) {
         importantOsd("Configure Trakt app credentials for this build");
         missingCredentialsNoticeShown = true;
@@ -1076,7 +1490,7 @@ function queueScrobble(verb, snapshot) {
     setScrobbleStatus({
       status: "failed",
       verb: verb,
-      mediaLabel: mediaLabel(payload.mediaInfo),
+      mediaLabel: scrobbleTargetLabel(payload),
       detail: errStr(error),
       reason: "",
       progress: payload.progress
@@ -1253,6 +1667,7 @@ async function finalizeCurrentMedia(reason) {
   if (!playbackState.prevSnapshot) {
     currentMedia = null;
     lastSourceSignature = "";
+    resetCorrectionState();
     resetPlaybackTracking();
     setScrobbleStatus({
       status: "idle",
@@ -1269,6 +1684,7 @@ async function finalizeCurrentMedia(reason) {
   playbackState.prevSnapshot = stoppedSnapshot;
   currentMedia = null;
   lastSourceSignature = "";
+  resetCorrectionState();
   queueSidebarRefresh(false);
   if (reason === "end-file") {
     await flushScrobbleQueue("end-file", 2500);
@@ -1319,6 +1735,7 @@ async function handleFileLoaded() {
   } else {
     resetPlaybackTracking();
     currentMedia = null;
+    resetCorrectionState();
   }
 
   lastSourceSignature = signature;

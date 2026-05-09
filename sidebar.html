@@ -371,6 +371,148 @@
       font-size: 12px;
     }
 
+    .correction-summary,
+    .correction-current,
+    .correction-status,
+    .correction-reference-label {
+      margin: 0;
+      color: var(--secondary);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .correction-summary {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .correction-open {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .correction-closed {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .correction-query-row {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .text-input {
+      min-width: 0;
+      flex: 1 1 auto;
+      min-height: 28px;
+      padding: 0 8px;
+      border-radius: 3px;
+      border: 1px solid var(--input-border);
+      color: var(--text);
+      background: var(--input-bg);
+      font: inherit;
+    }
+
+    .text-input::placeholder {
+      color: var(--tertiary);
+    }
+
+    .correction-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+    }
+
+    .correction-results {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .correction-reference {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding-top: 2px;
+    }
+
+    .correction-reference-row {
+      align-items: center;
+    }
+
+    .correction-reference-input {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .correction-result {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr) auto;
+      align-items: start;
+      column-gap: 10px;
+    }
+
+    .correction-result + .correction-result {
+      padding-top: 8px;
+      border-top: 1px solid var(--input-border-light);
+    }
+
+    .correction-poster {
+      flex: 0 0 auto;
+      width: 38px;
+      height: 56px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--input-border-light);
+      border: 1px solid var(--input-border);
+    }
+
+    .correction-poster img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .correction-copy {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .correction-title {
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+
+    .correction-subtitle {
+      margin: 3px 0 0;
+      color: var(--secondary);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .correction-detail-line {
+      margin: 2px 0 0;
+      color: var(--tertiary);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .correction-use {
+      align-self: center;
+      min-width: 56px;
+      padding-inline: 12px;
+    }
+
     .history-list {
       display: flex;
       flex-direction: column;
@@ -529,6 +671,7 @@
       touch-action: manipulation;
       -webkit-user-select: none;
       user-select: none;
+      white-space: nowrap;
       transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease;
     }
 
@@ -689,6 +832,37 @@
       </div>
     </section>
 
+    <section id="correction-section" class="section" hidden>
+      <div class="section-head">
+        <p class="section-label">Correct Match</p>
+      </div>
+      <div class="section-body">
+        <div id="correction-closed" class="correction-closed">
+          <p id="correction-summary" class="correction-summary">Wrong title? Search Trakt and pick a better match.</p>
+          <button id="open-correction-button" class="secondary" type="button">Correct Match</button>
+        </div>
+        <div id="correction-open" class="correction-open" hidden>
+          <p id="correction-current" class="correction-current">Current match</p>
+          <div class="correction-query-row">
+            <input id="correction-query" class="text-input" type="text" value="" placeholder="Search Trakt" spellcheck="false">
+            <div class="correction-actions">
+              <button id="correction-search-button" class="secondary" type="button">Search</button>
+              <button id="correction-close-button" class="ghost" type="button">Close</button>
+            </div>
+          </div>
+          <p id="correction-status" class="correction-status">Search Trakt for a better match.</p>
+          <div id="correction-results" class="correction-results" hidden></div>
+          <div class="correction-reference">
+            <p class="correction-reference-label">Know the exact Trakt ID or slug?</p>
+            <div class="correction-query-row correction-reference-row">
+              <input id="correction-reference" class="text-input correction-reference-input" type="text" value="" placeholder="Trakt ID or slug" spellcheck="false">
+              <button id="correction-reference-button" class="secondary" type="button">Lookup</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="history-section" class="section">
       <div class="section-head">
         <p class="section-label">Watch History</p>
@@ -774,6 +948,15 @@
           fetchedAt: "",
           error: ""
         },
+        correction: {
+          active: false,
+          busy: false,
+          query: "",
+          error: "",
+          mediaLabel: "",
+          mediaKey: "",
+          results: []
+        },
         app: {
           version: ""
         }
@@ -788,6 +971,7 @@
       var copyCodeFeedback = "";
       var copyCodeFeedbackTimer = 0;
       var lastActionAt = 0;
+      var lastActionKind = "";
 
       function send(name, payload) {
         if (!window.iina || typeof iina.postMessage !== "function") return;
@@ -1012,16 +1196,26 @@
         if (!stateReady) return;
 
         var now = Date.now();
-        if (now - lastActionAt < 350) {
+        if (kind === lastActionKind && (now - lastActionAt) < 350) {
           return;
         }
         lastActionAt = now;
+        lastActionKind = kind;
         pendingAction = kind;
 
         if (kind === "connect") {
           state.auth.busy = true;
           authRequestMode = state.auth.connected ? "reauth" : "connect";
           footerNotice = "";
+        }
+
+        if (
+          kind === "search_correction" ||
+          kind === "choose_correction" ||
+          kind === "lookup_correction_reference"
+        ) {
+          state.correction.busy = true;
+          state.correction.error = "";
         }
 
         render();
@@ -1155,6 +1349,8 @@
         var showMainSections = connected || reauthInFlight;
         var showScrobbleControl = connected || reauthInFlight;
         var showStatusOsdControl = connected || reauthInFlight;
+        var showCorrectionSection = showMainSections && !!(state.playback && state.playback.available);
+        var showHistorySection = showMainSections && !(state.correction && state.correction.active);
 
         if (!connected || auth.busy) {
           confirmingSignout = false;
@@ -1193,7 +1389,8 @@
         setHidden("status-osd-control", !showStatusOsdControl);
         setHidden("playback-section", !showMainSections);
         setHidden("scrobble-section", !showMainSections);
-        setHidden("history-section", !showMainSections);
+        setHidden("correction-section", !showCorrectionSection);
+        setHidden("history-section", !showHistorySection);
         setHidden("bottom-actions", !showFooter);
         setHidden("device-code-box", !hasCode);
         footerDefault.setAttribute("aria-hidden", confirmingSignout ? "true" : "false");
@@ -1260,6 +1457,149 @@
         setHidden("scrobble-detail", !detail);
       }
 
+      function renderCorrection() {
+        var correction = state.correction || {};
+        var open = !!correction.active;
+        var busy = !!correction.busy;
+        var input = document.getElementById("correction-query");
+        var referenceInput = document.getElementById("correction-reference");
+        var resultsRoot = document.getElementById("correction-results");
+        var searchButton = document.getElementById("correction-search-button");
+        var referenceButton = document.getElementById("correction-reference-button");
+        var closeButton = document.getElementById("correction-close-button");
+        var openButton = document.getElementById("open-correction-button");
+        var statusNode = document.getElementById("correction-status");
+        var summary = document.getElementById("correction-summary");
+        var results = Array.isArray(correction.results) ? correction.results : [];
+        var hasUnmatched = state.scrobble && state.scrobble.reason === "missing-trakt-match";
+        var statusText = "Search Trakt for a better match.";
+
+        if (!resultsRoot || !statusNode || !summary) {
+          return;
+        }
+
+        summary.textContent = hasUnmatched
+          ? "This file did not match on Trakt. Search and pick the correct title."
+          : "Wrong title? Search Trakt and pick a better match.";
+
+        setHidden("correction-closed", open);
+        setHidden("correction-open", !open);
+        setText("correction-current", correction.mediaLabel ? ("Current: " + correction.mediaLabel) : "Current file");
+
+        if (input && document.activeElement !== input) {
+          input.value = correction.query || "";
+        }
+
+        if (referenceInput && document.activeElement !== referenceInput) {
+          referenceInput.value = correction.reference || "";
+        }
+
+        if (openButton) {
+          openButton.disabled = !stateReady || busy;
+        }
+
+        if (searchButton) {
+          searchButton.disabled = !stateReady || busy;
+          searchButton.textContent = busy ? "Searching…" : "Search";
+        }
+
+        if (referenceButton) {
+          referenceButton.disabled = !stateReady || busy;
+          referenceButton.textContent = busy && pendingAction === "lookup_correction_reference"
+            ? "Looking…"
+            : "Lookup";
+        }
+
+        if (closeButton) {
+          closeButton.disabled = !stateReady || busy;
+        }
+
+        resultsRoot.textContent = "";
+
+        if (busy && pendingAction === "choose_correction") {
+          statusText = "Applying Trakt match…";
+        } else if (busy && pendingAction === "lookup_correction_reference") {
+          statusText = "Resolving Trakt match…";
+        } else if (busy) {
+          statusText = "Searching Trakt…";
+        } else if (correction.error) {
+          statusText = correction.error;
+        } else if (results.length) {
+          statusText = "Choose the correct Trakt match.";
+        }
+
+        if (results.length) {
+          results.forEach(function (result) {
+            var row = document.createElement("div");
+            row.className = "correction-result";
+
+            if (result.posterUrl) {
+              var poster = document.createElement("div");
+              poster.className = "correction-poster";
+
+              var image = document.createElement("img");
+              image.src = result.posterUrl;
+              image.alt = "";
+              image.loading = "lazy";
+              poster.appendChild(image);
+              row.appendChild(poster);
+            }
+
+            var copy = document.createElement("div");
+            copy.className = "correction-copy";
+
+            var title = document.createElement("p");
+            title.className = "correction-title";
+            title.textContent = result.title || "Unknown title";
+
+            var subtitle = document.createElement("p");
+            subtitle.className = "correction-subtitle";
+            subtitle.textContent = result.subtitle || "";
+
+            copy.appendChild(title);
+            if (result.subtitle) {
+              copy.appendChild(subtitle);
+            }
+
+            if (result.detail) {
+              var detail = document.createElement("p");
+              detail.className = "correction-detail-line";
+              detail.textContent = result.detail;
+              copy.appendChild(detail);
+            }
+
+            var button = document.createElement("button");
+            button.className = "secondary correction-use";
+            button.type = "button";
+            button.textContent = "Use";
+            button.disabled = !stateReady || busy || !Number(result.trakt || 0);
+
+            var activate = function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              requestAction("choose_correction", {
+                trakt: result.trakt
+              });
+            };
+
+            button.addEventListener("pointerdown", activate);
+            button.addEventListener("click", activate);
+            button.addEventListener("keydown", function (event) {
+              if (event.key === "Enter" || event.key === " ") {
+                activate(event);
+              }
+            });
+
+            row.appendChild(copy);
+            row.appendChild(button);
+            resultsRoot.appendChild(row);
+          });
+        }
+
+        setText("correction-status", statusText);
+        setHidden("correction-results", !results.length);
+      }
+
       function renderHistory() {
         var history = state.history || {};
         var items = Array.isArray(history.items) ? history.items : [];
@@ -1310,6 +1650,7 @@
         renderAuth();
         renderPlayback();
         renderScrobble();
+        renderCorrection();
         renderHistory();
         renderProvider();
       }
@@ -1319,6 +1660,7 @@
       bindScrobbleToggle("scrobble-toggle");
       bindStatusOsdToggle("status-osd-toggle");
       bindSelectableInput("device-code");
+      bindAction("open-correction-button", "open_correction");
       bindLocalAction("copy-code-button", function () {
         if (!state.auth || !state.auth.deviceCode || copyCodeBusy) {
           return;
@@ -1326,6 +1668,22 @@
         copyCodeBusy = true;
         render();
         send("copy_auth_code");
+      });
+      bindLocalAction("correction-search-button", function () {
+        var input = document.getElementById("correction-query");
+        requestAction("search_correction", {
+          query: input ? input.value : ""
+        });
+      });
+      bindLocalAction("correction-reference-button", function () {
+        var input = document.getElementById("correction-reference");
+        requestAction("lookup_correction_reference", {
+          reference: input ? input.value : ""
+        });
+      });
+      bindLocalAction("correction-close-button", function () {
+        pendingAction = "";
+        send("close_correction");
       });
       bindLocalAction("signout-button", function () {
         footerNotice = "";
@@ -1341,10 +1699,35 @@
         requestAction("signout");
       });
 
+      var correctionInput = document.getElementById("correction-query");
+      if (correctionInput) {
+        correctionInput.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            requestAction("search_correction", {
+              query: correctionInput.value
+            });
+          }
+        });
+      }
+
+      var correctionReferenceInput = document.getElementById("correction-reference");
+      if (correctionReferenceInput) {
+        correctionReferenceInput.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            requestAction("lookup_correction_reference", {
+              reference: correctionReferenceInput.value
+            });
+          }
+        });
+      }
+
       if (window.iina && typeof iina.onMessage === "function") {
         iina.onMessage("state", function (payload) {
           var nextState = payload || state;
           var nextAuth = nextState.auth || {};
+          var nextCorrection = nextState.correction || {};
           var authCompleted = authRequestMode && !nextAuth.busy;
 
           state = nextState;
@@ -1366,7 +1749,7 @@
               showFooterNotice((authRequestMode === "reauth" ? "Re-auth failed: " : "Connect failed: ") + failureDetail, 6200);
             }
             authRequestMode = "";
-          } else if (pendingAction && !nextAuth.busy) {
+          } else if (pendingAction && !nextAuth.busy && !nextCorrection.busy) {
             pendingAction = "";
           }
 

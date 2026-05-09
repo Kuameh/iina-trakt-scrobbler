@@ -293,6 +293,374 @@ async function run() {
     assert.deepStrictEqual(calls, []);
   });
 
+  await test("returns verified manual correction candidates for episodes", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({ movie: {}, show: {} });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/search/show") {
+        return {
+          statusCode: 200,
+          body: [
+            {
+              score: 9,
+              show: {
+                title: "Arrested Development",
+                year: 2003,
+                ids: { trakt: 111 }
+              }
+            },
+            {
+              score: 8,
+              show: {
+                title: "Arrested Development",
+                year: 2003,
+                ids: { trakt: 222 },
+                images: {
+                  poster: [
+                    "media.trakt.tv/posters/arrested-medium.jpg.webp"
+                  ]
+                }
+              }
+            }
+          ]
+        };
+      }
+      if (request.url.pathname === "/shows/111/seasons/1/episodes/6") {
+        return {
+          statusCode: 404,
+          body: {}
+        };
+      }
+      if (request.url.pathname === "/shows/222/seasons/1/episodes/6") {
+        return {
+          statusCode: 200,
+          body: {
+            title: "Visiting Ours",
+            season: 1,
+            number: 6
+          }
+        };
+      }
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    const results = await trakt.searchCorrectionCandidates({
+      type: "episode",
+      title: "Arrested Development",
+      showTitle: "Arrested Development",
+      season: 1,
+      episode: 6,
+      episodeTitle: "Visiting Ours"
+    }, "Arrested Development", 6);
+
+    assert.deepStrictEqual(results, [
+      {
+        trakt: 222,
+        kind: "episode",
+        title: "Arrested Development",
+        subtitle: "Show · 2003",
+        detail: "S01E06 - Visiting Ours · title match",
+        year: 2003,
+        posterUrl: "https://media.trakt.tv/posters/arrested-medium.jpg.webp"
+      }
+    ]);
+  });
+
+  await test("stores a manual episode override as a verified cache entry", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({ movie: {}, show: {} });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt, calls } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/shows/222/seasons/1/episodes/6") {
+        return {
+          statusCode: 200,
+          body: {
+            title: "Visiting Ours",
+            season: 1,
+            number: 6
+          }
+        };
+      }
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    await trakt.applyMatchOverride({
+      type: "episode",
+      title: "Arrested Development",
+      showTitle: "Arrested Development",
+      season: 1,
+      episode: 6,
+      episodeTitle: "Visiting Ours"
+    }, 222);
+
+    const cache = JSON.parse(store[CACHE_PATH]);
+    assert.deepStrictEqual(cache.show["arrested development|"], {
+      trakt: 222,
+      verified: true
+    });
+
+    const payload = await trakt.prepareScrobblePayload({
+      type: "episode",
+      title: "Arrested Development",
+      showTitle: "Arrested Development",
+      season: 1,
+      episode: 6,
+      episodeTitle: "Visiting Ours"
+    });
+
+    assert.deepStrictEqual(payload, {
+      show: {
+        ids: { trakt: 222 }
+      },
+      episode: {
+        season: 1,
+        number: 6
+      }
+    });
+    assert.strictEqual(calls.length, 1);
+  });
+
+  await test("returns movie correction candidates with year metadata", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({ movie: {}, show: {} });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/search/movie") {
+        return {
+          statusCode: 200,
+          body: [
+            {
+              score: 8,
+              movie: {
+                title: "Big Fat Liar",
+                year: 2002,
+                ids: { trakt: 123 },
+                images: {
+                  poster: [
+                    "media.trakt.tv/posters/big-fat-liar-medium.jpg.webp"
+                  ]
+                }
+              }
+            }
+          ]
+        };
+      }
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    const results = await trakt.searchCorrectionCandidates({
+      type: "movie",
+      title: "Big Fat Liar",
+      year: 2002
+    }, "Big Fat Liar", 6);
+
+    assert.deepStrictEqual(results, [
+      {
+        trakt: 123,
+        kind: "movie",
+        title: "Big Fat Liar",
+        subtitle: "Movie · 2002",
+        detail: "",
+        year: 2002,
+        posterUrl: "https://media.trakt.tv/posters/big-fat-liar-medium.jpg.webp"
+      }
+    ]);
+  });
+
+  await test("looks up a movie correction candidate directly by trakt slug", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({ movie: {}, show: {} });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt, calls } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/movies/the-crush-1993") {
+        return {
+          statusCode: 200,
+          body: {
+            title: "The Crush",
+            year: 1993,
+            ids: { trakt: 21401, slug: "the-crush-1993" },
+            images: {
+              poster: [
+                "media.trakt.tv/posters/the-crush-1993-medium.jpg.webp"
+              ]
+            }
+          }
+        };
+      }
+
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    const result = await trakt.lookupCorrectionReference({
+      type: "movie",
+      title: "Crush",
+      year: 2022
+    }, "the-crush-1993");
+
+    assert.deepStrictEqual(result, {
+      trakt: 21401,
+      kind: "movie",
+      title: "The Crush",
+      subtitle: "Movie · 1993",
+      detail: "",
+      year: 1993,
+      posterUrl: "https://media.trakt.tv/posters/the-crush-1993-medium.jpg.webp"
+    });
+    assert.deepStrictEqual(calls, [
+      "GET /movies/the-crush-1993?extended=full"
+    ]);
+  });
+
+  await test("looks up an episode correction candidate directly by trakt slug", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({ movie: {}, show: {} });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt, calls } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/shows/arrested-development") {
+        return {
+          statusCode: 200,
+          body: {
+            title: "Arrested Development",
+            year: 2003,
+            ids: { trakt: 4589, slug: "arrested-development" },
+            images: {
+              poster: [
+                "media.trakt.tv/posters/arrested-development-medium.jpg.webp"
+              ]
+            }
+          }
+        };
+      }
+      if (request.url.pathname === "/shows/4589/seasons/1/episodes/6") {
+        return {
+          statusCode: 200,
+          body: {
+            title: "Visiting Ours",
+            season: 1,
+            number: 6
+          }
+        };
+      }
+
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    const result = await trakt.lookupCorrectionReference({
+      type: "episode",
+      title: "Arrested Development",
+      showTitle: "Arrested Development",
+      season: 1,
+      episode: 6,
+      episodeTitle: "Visiting Ours"
+    }, "arrested-development");
+
+    assert.deepStrictEqual(result, {
+      trakt: 4589,
+      kind: "episode",
+      title: "Arrested Development",
+      subtitle: "Show · 2003",
+      detail: "S01E06 - Visiting Ours · title match",
+      year: 2003,
+      posterUrl: "https://media.trakt.tv/posters/arrested-development-medium.jpg.webp"
+    });
+    assert.deepStrictEqual(calls, [
+      "GET /shows/arrested-development?extended=full",
+      "GET /shows/4589/seasons/1/episodes/6"
+    ]);
+  });
+
+  await test("prioritizes exact movie title matches with matching year in correction search", async function() {
+    const store = {};
+    const logs = [];
+    store[CACHE_PATH] = JSON.stringify({ movie: {}, show: {} });
+    store[TOKEN_PATH] = JSON.stringify(makeToken());
+
+    const { trakt } = loadFreshTrakt(store, function(request) {
+      if (request.url.pathname === "/search/movie") {
+        const years = request.url.searchParams.get("years") || "";
+        if (years === "2022") {
+          return {
+            statusCode: 200,
+            body: [
+              {
+                score: 5,
+                movie: {
+                  title: "Crush",
+                  year: 2022,
+                  ids: { trakt: 3022 },
+                  images: {
+                    poster: [
+                      "media.trakt.tv/posters/crush-2022-medium.jpg.webp"
+                    ]
+                  }
+                }
+              }
+            ]
+          };
+        }
+
+        return {
+          statusCode: 200,
+          body: [
+            {
+              score: 9,
+              movie: {
+                title: "The Crush",
+                year: 1993,
+                ids: { trakt: 21993 },
+                images: {
+                  poster: [
+                    "media.trakt.tv/posters/the-crush-1993-medium.jpg.webp"
+                  ]
+                }
+              }
+            },
+            {
+              score: 8,
+              movie: {
+                title: "Blue Crush",
+                year: 2002,
+                ids: { trakt: 22002 },
+                images: {
+                  poster: [
+                    "media.trakt.tv/posters/blue-crush-2002-medium.jpg.webp"
+                  ]
+                }
+              }
+            }
+          ]
+        };
+      }
+
+      throw new Error("Unhandled request: " + request.method + " " + request.url.pathname + request.url.search);
+    }, logs);
+
+    const results = await trakt.searchCorrectionCandidates({
+      type: "movie",
+      title: "Crush",
+      year: 2022
+    }, "Crush", 10);
+
+    assert.strictEqual(results[0].trakt, 3022);
+    assert.strictEqual(results[0].title, "Crush");
+    assert.strictEqual(results[0].year, 2022);
+    assert.strictEqual(
+      results[0].posterUrl,
+      "https://media.trakt.tv/posters/crush-2022-medium.jpg.webp"
+    );
+  });
+
   await test("skips stop scrobbles below 1 percent without calling trakt", async function() {
     const store = {};
     const logs = [];

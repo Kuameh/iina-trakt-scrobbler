@@ -1,12 +1,12 @@
 {
   "name": "Trakt Scrobbler",
   "identifier": "io.github.fahim.iinatraktscrobbler",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "author": {
     "name": "Fahim"
   },
   "ghRepo": "i3p9/iina-trakt-scrobbler",
-  "ghVersion": "0.1.35",
+  "ghVersion": "0.1.36",
   "entry": "main.js",
   "description": "A Trakt scrobbler plugin for IINA.",
   "sidebarTab": {
