@@ -6,6 +6,9 @@ var trakt = require("./trakt.js");
 var PLUGIN_VERSION = "0.1.36";
 var DEBUG_LOG_PATH = "@data/debug.log";
 var MAX_DEBUG_LOG_CHARS = 200000;
+var PENDING_SCROBBLES_PATH = "@data/pending-scrobbles.json";
+var MAX_PENDING_SCROBBLES = 100;
+var pendingFlushActive = false;
 var POLL_INTERVAL_MS = 2000;
 var UI_POLL_INTERVAL_MS = 750;
 var PLUGIN_SIDEBAR_ID = "plugin:io.github.fahim.iinatraktscrobbler";
@@ -1312,6 +1315,105 @@ function setScrobblingEnabled(enabled) {
   });
 }
 
+function loadPendingScrobbles() {
+  try {
+    var raw = file.exists(PENDING_SCROBBLES_PATH) ? (file.read(PENDING_SCROBBLES_PATH) || "[]") : "[]";
+    var items = JSON.parse(raw);
+    return Array.isArray(items) ? items : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function savePendingScrobbles(items) {
+  try {
+    file.write(PENDING_SCROBBLES_PATH, JSON.stringify(items, null, 2));
+  } catch (_error) {}
+}
+
+function addToPendingQueue(verb, mediaInfo, progress) {
+  if (verb !== "stop") return;
+  var id = [
+    "stop",
+    monitor.mediaKey(mediaInfo),
+    String(Math.round(Number(progress || 0) * 100) / 100)
+  ].join("|");
+  var items = loadPendingScrobbles();
+  if (items.some(function(item) { return item.id === id; })) return;
+  if (items.length >= MAX_PENDING_SCROBBLES) {
+    items = items.slice(items.length - MAX_PENDING_SCROBBLES + 1);
+  }
+  items.push({ id: id, verb: "stop", mediaInfo: mediaInfo, progress: Number(progress || 0), queuedAt: new Date().toISOString() });
+  savePendingScrobbles(items);
+  log("Offline queue: saved " + id + " (" + items.length + " pending)");
+}
+
+function removeFromPendingQueue(id) {
+  var items = loadPendingScrobbles().filter(function(item) { return item.id !== id; });
+  savePendingScrobbles(items);
+}
+
+function isNetworkError(error) {
+  return !error.statusCode;
+}
+
+async function flushPendingScrobbles() {
+  if (pendingFlushActive) return;
+  var initial = loadPendingScrobbles();
+  if (!initial.length) return;
+  pendingFlushActive = true;
+  log("Offline queue: flushing " + initial.length + " pending scrobble(s)");
+  try {
+    while (true) {
+      var items = loadPendingScrobbles();
+      if (!items.length) break;
+      var item = items[0];
+      log("Offline queue: replaying " + item.id);
+      try {
+        var result = await trakt.scrobble(item.verb, item.mediaInfo, item.progress);
+        if (result && result.ok) {
+          var action = successfulScrobbleAction(item.verb, result);
+          log("Offline queue: replay succeeded for " + item.id + " (action=" + action + ")");
+          maybeShowScrobbleStatusOsd(item.verb, action, item.mediaInfo);
+          if (action === "scrobble" && trakt && typeof trakt.clearRecentHistoryCache === "function") {
+            trakt.clearRecentHistoryCache();
+          }
+          removeFromPendingQueue(item.id);
+        } else if (result && result.skip) {
+          if (result.reason === "auth-required" || result.reason === "missing-client-credentials") {
+            log("Offline queue: replay requires auth, pausing flush");
+            break;
+          }
+          log("Offline queue: replay permanently skipped for " + item.id + " (" + result.reason + "), dropping");
+          removeFromPendingQueue(item.id);
+        } else if (result && result.duplicate) {
+          log("Offline queue: replay already recorded for " + item.id + ", dropping");
+          removeFromPendingQueue(item.id);
+        } else if (result && result.notFound) {
+          log("Offline queue: no Trakt match for " + item.id + ", dropping");
+          removeFromPendingQueue(item.id);
+        } else {
+          log("Offline queue: unexpected result for " + item.id + ", dropping");
+          removeFromPendingQueue(item.id);
+        }
+      } catch (error) {
+        if (isNetworkError(error)) {
+          log("Offline queue: still offline, pausing flush (" + errStr(error) + ")");
+          break;
+        }
+        log("Offline queue: non-network error for " + item.id + ": " + errStr(error) + ", dropping");
+        removeFromPendingQueue(item.id);
+      }
+    }
+  } finally {
+    pendingFlushActive = false;
+    var remaining = loadPendingScrobbles();
+    if (remaining.length) {
+      log("Offline queue: " + remaining.length + " scrobble(s) still pending");
+    }
+  }
+}
+
 function queueScrobble(verb, snapshot) {
   if (!isScrobblingEnabled()) {
     setScrobbleStatus({
@@ -1407,6 +1509,7 @@ function queueScrobble(verb, snapshot) {
           debugOsd("Scrobble flow active");
           firstScrobbleNoticeShown = true;
         }
+        flushPendingScrobbles().catch(function(e) { log("Offline queue flush error: " + errStr(e)); });
         return;
       }
 
@@ -1478,6 +1581,9 @@ function queueScrobble(verb, snapshot) {
         progress: payload.progress
       });
       log("Scrobble failed for " + scrobbleTargetLabel(payload) + ": " + errStr(error));
+      if (isNetworkError(error)) {
+        addToPendingQueue(effectiveVerb, payload.mediaInfo, payload.progress);
+      }
       if (/Missing Trakt client credentials/.test(errStr(error)) && !missingCredentialsNoticeShown) {
         importantOsd("Configure Trakt app credentials for this build");
         missingCredentialsNoticeShown = true;
@@ -1750,6 +1856,7 @@ appendDebugLog("[IINATraktScrobbler] Session start");
 log("Plugin main loaded");
 appendDebugLog("[IINATraktScrobbler] Parser mode default=guessit-with-heuristic-fallback");
 persistAuthStatus();
+flushPendingScrobbles().catch(function(e) { log("Offline queue startup flush error: " + errStr(e)); });
 registerMenuItems();
 ensurePollTimer();
 ensureUiPollTimer();
