@@ -2,6 +2,7 @@ const assert = require("assert");
 const path = require("path");
 
 const QUEUE_PATH = "@data/pending-scrobbles.json";
+const SYNCED_PATH = "@data/synced-scrobbles.json";
 
 // ---- Fixtures ----
 
@@ -67,6 +68,11 @@ function loadFreshQueue(store, traktHandler, onReplaySuccess) {
   return q;
 }
 
+function readSynced(store) {
+  if (!store[SYNCED_PATH]) return [];
+  return JSON.parse(store[SYNCED_PATH]);
+}
+
 function networkError() {
   return new Error("curl: (6) Could not resolve host: api.trakt.tv");
 }
@@ -104,6 +110,11 @@ async function run() {
     assert.strictEqual(q.getStatus().activeSyncId, null);
   });
 
+  await test("getStatus returns flushing false when not flushing", function() {
+    const q = loadFreshQueue({});
+    assert.strictEqual(q.getStatus().flushing, false);
+  });
+
   await test("getStatus returns pending items from disk", function() {
     const store = {};
     const q = loadFreshQueue(store);
@@ -131,6 +142,54 @@ async function run() {
     const q = loadFreshQueue(store);
     q.addToPendingQueue("stop", movie, 92);
     assert.deepStrictEqual(q.getStatus().recentlySynced, []);
+  });
+
+  // getStatus — flushing flag
+
+  await test("getStatus flushing is true while flush is in progress", async function() {
+    const store = {};
+    let observedFlushing = false;
+    let resolveBlock;
+    const blocked = new Promise(function(r) { resolveBlock = r; });
+
+    const q = loadFreshQueue(store, async function() {
+      observedFlushing = q.getStatus().flushing;
+      await blocked;
+      return { ok: true, action: "scrobble" };
+    });
+
+    q.addToPendingQueue("stop", movie, 92);
+    const flush = q.flushPendingScrobbles();
+    resolveBlock();
+    await flush;
+
+    assert.strictEqual(observedFlushing, true);
+  });
+
+  await test("getStatus flushing is false after flush completes", async function() {
+    const store = {};
+    const q = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
+    q.addToPendingQueue("stop", movie, 92);
+    await q.flushPendingScrobbles();
+    assert.strictEqual(q.getStatus().flushing, false);
+  });
+
+  await test("getStatus flushing is false after flush pauses on network error", async function() {
+    const store = {};
+    const q = loadFreshQueue(store, function() { throw networkError(); });
+    q.addToPendingQueue("stop", movie, 92);
+    await q.flushPendingScrobbles();
+    assert.strictEqual(q.getStatus().flushing, false);
+  });
+
+  await test("getStatus flushing is false after flush pauses on auth-required", async function() {
+    const store = {};
+    const q = loadFreshQueue(store, function() {
+      return { ok: false, skip: true, reason: "auth-required" };
+    });
+    q.addToPendingQueue("stop", movie, 92);
+    await q.flushPendingScrobbles();
+    assert.strictEqual(q.getStatus().flushing, false);
   });
 
   // getStatus — activeSyncId during flush
@@ -258,17 +317,12 @@ async function run() {
 
   await test("recentlySynced orders newest first (most recent sync at index 0)", async function() {
     const store = {};
-    const order = [];
-    const q = loadFreshQueue(store, function(verb, info) {
-      order.push(info);
-      return { ok: true, action: "scrobble" };
-    });
+    const q = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
     q.addToPendingQueue("stop", movie, 92);
     q.addToPendingQueue("stop", episode, 85);
     await q.flushPendingScrobbles();
     const synced = q.getStatus().recentlySynced;
     assert.strictEqual(synced.length, 2);
-    // episode was synced second → it should be at index 0
     assert.deepStrictEqual(synced[0].mediaInfo, episode);
     assert.deepStrictEqual(synced[1].mediaInfo, movie);
   });
@@ -341,33 +395,79 @@ async function run() {
     assert.deepStrictEqual(synced[0].mediaInfo, movie);
   });
 
-  // recentlySynced — cap at 20
+  // recentlySynced — cap at 50
 
-  await test("recentlySynced is capped at 20 items (oldest dropped)", async function() {
+  await test("recentlySynced is capped at 50 items (oldest dropped)", async function() {
     const store = {};
     const q = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
-    for (var i = 0; i < 22; i++) {
+    for (var i = 0; i < 52; i++) {
       q.addToPendingQueue("stop", { type: "movie", title: "Movie " + i, year: 2000 + i }, 90);
       await q.flushPendingScrobbles();
     }
     const synced = q.getStatus().recentlySynced;
-    assert.strictEqual(synced.length, 20);
-    // most recent item (Movie 21) should be at index 0
-    assert.strictEqual(synced[0].mediaInfo.title, "Movie 21");
-    // oldest kept item is Movie 2 (items 0 and 1 were evicted)
-    assert.strictEqual(synced[19].mediaInfo.title, "Movie 2");
+    assert.strictEqual(synced.length, 50);
+    assert.strictEqual(synced[0].mediaInfo.title, "Movie 51");
+    assert.strictEqual(synced[49].mediaInfo.title, "Movie 2");
   });
 
-  // getStatus — recentlySynced returns a snapshot copy
+  // persistence — synced history survives across instances
 
-  await test("getStatus recentlySynced returns a copy (mutations do not affect internal state)", async function() {
+  await test("recentlySynced persists to disk and is readable by a fresh instance", async function() {
     const store = {};
-    const q = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
-    q.addToPendingQueue("stop", movie, 92);
-    await q.flushPendingScrobbles();
-    const copy = q.getStatus().recentlySynced;
-    copy.push({ fake: true });
-    assert.strictEqual(q.getStatus().recentlySynced.length, 1);
+    const q1 = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
+    q1.addToPendingQueue("stop", movie, 92);
+    await q1.flushPendingScrobbles();
+
+    const q2 = loadFreshQueue(store);
+    const synced = q2.getStatus().recentlySynced;
+    assert.strictEqual(synced.length, 1);
+    assert.deepStrictEqual(synced[0].mediaInfo, movie);
+  });
+
+  await test("recentlySynced from a previous session is prepended to by a new flush", async function() {
+    const store = {};
+    const q1 = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
+    q1.addToPendingQueue("stop", movie, 92);
+    await q1.flushPendingScrobbles();
+
+    const q2 = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
+    q2.addToPendingQueue("stop", episode, 85);
+    await q2.flushPendingScrobbles();
+
+    const synced = q2.getStatus().recentlySynced;
+    assert.strictEqual(synced.length, 2);
+    assert.deepStrictEqual(synced[0].mediaInfo, episode);
+    assert.deepStrictEqual(synced[1].mediaInfo, movie);
+  });
+
+  await test("loadSyncedScrobbles returns empty array when file does not exist", function() {
+    const store = {};
+    const q = loadFreshQueue(store);
+    assert.deepStrictEqual(q.loadSyncedScrobbles(), []);
+  });
+
+  await test("loadSyncedScrobbles tolerates corrupt synced file", function() {
+    const store = { [SYNCED_PATH]: "not valid json {{" };
+    const q = loadFreshQueue(store);
+    assert.deepStrictEqual(q.loadSyncedScrobbles(), []);
+  });
+
+  await test("recentlySynced cap is enforced across sessions (fresh instance reads capped history)", async function() {
+    const store = {};
+    const q1 = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
+    for (var i = 0; i < 50; i++) {
+      q1.addToPendingQueue("stop", { type: "movie", title: "Old " + i, year: 2000 }, 90);
+      await q1.flushPendingScrobbles();
+    }
+    assert.strictEqual(readSynced(store).length, 50);
+
+    const q2 = loadFreshQueue(store, function() { return { ok: true, action: "scrobble" }; });
+    q2.addToPendingQueue("stop", { type: "movie", title: "New", year: 2025 }, 90);
+    await q2.flushPendingScrobbles();
+
+    const synced = readSynced(store);
+    assert.strictEqual(synced.length, 50);
+    assert.strictEqual(synced[0].mediaInfo.title, "New");
   });
 
   console.log("offline queue getStatus tests passed");

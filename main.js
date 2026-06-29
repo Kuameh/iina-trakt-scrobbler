@@ -438,6 +438,7 @@ async function buildSidebarPayload(forceProfileRefresh) {
 
   var queueStatus = offlineQueue.getStatus();
   var offlineQueuePayload = {
+    flushing: !!queueStatus.flushing,
     pending: queueStatus.pending.map(function(item) {
       return {
         id: item.id,
@@ -622,6 +623,14 @@ function bindSidebarMessaging() {
   sidebar.onMessage("close_correction", function() {
     log("Sidebar requested correction close");
     resetCorrectionState();
+    queueSidebarRefresh(false);
+  });
+
+  sidebar.onMessage("flush_offline_queue", function() {
+    log("Sidebar requested offline queue flush");
+    offlineQueue.flushPendingScrobbles().catch(function(error) {
+      log("Sidebar-triggered offline flush failed: " + errStr(error));
+    });
     queueSidebarRefresh(false);
   });
 

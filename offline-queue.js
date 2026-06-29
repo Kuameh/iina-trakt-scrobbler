@@ -1,6 +1,7 @@
 var PENDING_SCROBBLES_PATH = "@data/pending-scrobbles.json";
+var SYNCED_SCROBBLES_PATH = "@data/synced-scrobbles.json";
 var MAX_PENDING_SCROBBLES = 100;
-var MAX_RECENTLY_SYNCED = 20;
+var MAX_SYNCED_SCROBBLES = 50;
 
 var runtime = {
   file: null,
@@ -12,7 +13,6 @@ var runtime = {
 
 var pendingFlushActive = false;
 var activeSyncId = null;
-var recentlySynced = [];
 
 function configure(options) {
   runtime.file = options.file;
@@ -44,6 +44,33 @@ function savePendingScrobbles(items) {
   try {
     runtime.file.write(PENDING_SCROBBLES_PATH, JSON.stringify(items, null, 2));
   } catch (_error) {}
+}
+
+function loadSyncedScrobbles() {
+  try {
+    var raw = runtime.file.exists(SYNCED_SCROBBLES_PATH)
+      ? (runtime.file.read(SYNCED_SCROBBLES_PATH) || "[]")
+      : "[]";
+    var items = JSON.parse(raw);
+    return Array.isArray(items) ? items : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function saveSyncedScrobbles(items) {
+  try {
+    runtime.file.write(SYNCED_SCROBBLES_PATH, JSON.stringify(items, null, 2));
+  } catch (_error) {}
+}
+
+function addToSyncedScrobbles(id, mediaInfo) {
+  var items = loadSyncedScrobbles();
+  items.unshift({ id: id, mediaInfo: mediaInfo, syncedAt: new Date().toISOString() });
+  if (items.length > MAX_SYNCED_SCROBBLES) {
+    items = items.slice(0, MAX_SYNCED_SCROBBLES);
+  }
+  saveSyncedScrobbles(items);
 }
 
 function pendingQueueId(mediaInfo, progress) {
@@ -101,10 +128,7 @@ async function flushPendingScrobbles() {
           var action = (result.action) ? String(result.action) : item.verb;
           log("Offline queue: replay succeeded for " + item.id + " (action=" + action + ")");
           runtime.onReplaySuccess(item.verb, action, item.mediaInfo);
-          recentlySynced.unshift({ id: item.id, mediaInfo: item.mediaInfo, syncedAt: new Date().toISOString() });
-          if (recentlySynced.length > MAX_RECENTLY_SYNCED) {
-            recentlySynced = recentlySynced.slice(0, MAX_RECENTLY_SYNCED);
-          }
+          addToSyncedScrobbles(item.id, item.mediaInfo);
           activeSyncId = null;
           removeFromPendingQueue(item.id);
         } else if (result && result.skip) {
@@ -153,7 +177,8 @@ function getStatus() {
   return {
     pending: loadPendingScrobbles(),
     activeSyncId: activeSyncId,
-    recentlySynced: recentlySynced.slice()
+    flushing: pendingFlushActive,
+    recentlySynced: loadSyncedScrobbles()
   };
 }
 
@@ -163,5 +188,6 @@ module.exports = {
   flushPendingScrobbles: flushPendingScrobbles,
   isNetworkError: isNetworkError,
   loadPendingScrobbles: loadPendingScrobbles,
+  loadSyncedScrobbles: loadSyncedScrobbles,
   getStatus: getStatus
 };

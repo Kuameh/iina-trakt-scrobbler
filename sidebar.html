@@ -948,7 +948,7 @@
     <section id="offline-queue-section" class="section" hidden>
       <div class="section-head">
         <p class="section-label">Offline Queue</p>
-        <span id="offline-queue-pill" class="status-pill" hidden></span>
+        <button id="offline-queue-sync-button" class="secondary" type="button" hidden>Sync Now</button>
       </div>
       <div class="section-body">
         <div id="offline-queue-list" class="queue-list"></div>
@@ -1041,6 +1041,7 @@
           results: []
         },
         offlineQueue: {
+          flushing: false,
           pending: [],
           recentlySynced: []
         },
@@ -1731,24 +1732,24 @@
         var queue = state.offlineQueue || {};
         var pending = Array.isArray(queue.pending) ? queue.pending : [];
         var recentlySynced = Array.isArray(queue.recentlySynced) ? queue.recentlySynced : [];
+        var flushing = !!queue.flushing;
         var section = document.getElementById("offline-queue-section");
         var list = document.getElementById("offline-queue-list");
         var empty = document.getElementById("offline-queue-empty");
-        var pill = document.getElementById("offline-queue-pill");
+        var syncButton = document.getElementById("offline-queue-sync-button");
 
-        if (!section || !list || !empty || !pill) return;
+        if (!section || !list || !empty || !syncButton) return;
 
         var hasPending = pending.length > 0;
         var hasSynced = recentlySynced.length > 0;
 
         section.hidden = !hasPending && !hasSynced;
 
-        if (!hasPending && !hasSynced) return;
+        syncButton.hidden = !hasPending;
+        syncButton.disabled = !stateReady || flushing || !hasPending;
+        syncButton.textContent = flushing ? "Syncing…" : "Sync Now";
 
-        var pendingCount = pending.filter(function(i) { return !i.syncing; }).length;
-        var syncingCount = pending.filter(function(i) { return i.syncing; }).length;
-        pill.textContent = String(pendingCount + syncingCount);
-        pill.hidden = (pendingCount + syncingCount) === 0;
+        if (!hasPending && !hasSynced) return;
 
         list.textContent = "";
 
@@ -1825,6 +1826,11 @@
       bindStatusOsdToggle("status-osd-toggle");
       bindSelectableInput("device-code");
       bindAction("open-correction-button", "open_correction");
+      bindLocalAction("offline-queue-sync-button", function () {
+        var queue = state.offlineQueue || {};
+        if (!stateReady || queue.flushing || !(queue.pending && queue.pending.length)) return;
+        send("flush_offline_queue");
+      });
       bindLocalAction("copy-code-button", function () {
         if (!state.auth || !state.auth.deviceCode || copyCodeBusy) {
           return;
