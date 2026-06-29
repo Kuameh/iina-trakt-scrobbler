@@ -1,5 +1,6 @@
 var PENDING_SCROBBLES_PATH = "@data/pending-scrobbles.json";
 var MAX_PENDING_SCROBBLES = 100;
+var MAX_RECENTLY_SYNCED = 20;
 
 var runtime = {
   file: null,
@@ -10,6 +11,8 @@ var runtime = {
 };
 
 var pendingFlushActive = false;
+var activeSyncId = null;
+var recentlySynced = [];
 
 function configure(options) {
   runtime.file = options.file;
@@ -90,6 +93,7 @@ async function flushPendingScrobbles() {
       var items = loadPendingScrobbles();
       if (!items.length) break;
       var item = items[0];
+      activeSyncId = item.id;
       log("Offline queue: replaying " + item.id);
       try {
         var result = await runtime.trakt.scrobble(item.verb, item.mediaInfo, item.progress);
@@ -97,25 +101,36 @@ async function flushPendingScrobbles() {
           var action = (result.action) ? String(result.action) : item.verb;
           log("Offline queue: replay succeeded for " + item.id + " (action=" + action + ")");
           runtime.onReplaySuccess(item.verb, action, item.mediaInfo);
+          recentlySynced.unshift({ id: item.id, mediaInfo: item.mediaInfo, syncedAt: new Date().toISOString() });
+          if (recentlySynced.length > MAX_RECENTLY_SYNCED) {
+            recentlySynced = recentlySynced.slice(0, MAX_RECENTLY_SYNCED);
+          }
+          activeSyncId = null;
           removeFromPendingQueue(item.id);
         } else if (result && result.skip) {
           if (result.reason === "auth-required" || result.reason === "missing-client-credentials") {
             log("Offline queue: replay requires auth, pausing flush");
+            activeSyncId = null;
             break;
           }
           log("Offline queue: replay permanently skipped for " + item.id + " (" + result.reason + "), dropping");
+          activeSyncId = null;
           removeFromPendingQueue(item.id);
         } else if (result && result.duplicate) {
           log("Offline queue: replay already recorded for " + item.id + ", dropping");
+          activeSyncId = null;
           removeFromPendingQueue(item.id);
         } else if (result && result.notFound) {
           log("Offline queue: no Trakt match for " + item.id + ", dropping");
+          activeSyncId = null;
           removeFromPendingQueue(item.id);
         } else {
           log("Offline queue: unexpected result for " + item.id + ", dropping");
+          activeSyncId = null;
           removeFromPendingQueue(item.id);
         }
       } catch (error) {
+        activeSyncId = null;
         if (isNetworkError(error)) {
           log("Offline queue: still offline, pausing flush (" + (error.message || String(error)) + ")");
           break;
@@ -125,6 +140,7 @@ async function flushPendingScrobbles() {
       }
     }
   } finally {
+    activeSyncId = null;
     pendingFlushActive = false;
     var remaining = loadPendingScrobbles();
     if (remaining.length) {
@@ -133,10 +149,19 @@ async function flushPendingScrobbles() {
   }
 }
 
+function getStatus() {
+  return {
+    pending: loadPendingScrobbles(),
+    activeSyncId: activeSyncId,
+    recentlySynced: recentlySynced.slice()
+  };
+}
+
 module.exports = {
   configure: configure,
   addToPendingQueue: addToPendingQueue,
   flushPendingScrobbles: flushPendingScrobbles,
   isNetworkError: isNetworkError,
-  loadPendingScrobbles: loadPendingScrobbles
+  loadPendingScrobbles: loadPendingScrobbles,
+  getStatus: getStatus
 };

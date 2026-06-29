@@ -549,6 +549,78 @@
       font-size: 12px;
     }
 
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .queue-group + .queue-group {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--input-border-light);
+    }
+
+    .queue-group-label {
+      margin: 0 0 6px;
+      color: var(--tertiary);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .queue-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .queue-item-dot {
+      flex: 0 0 auto;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 4px;
+    }
+
+    .queue-item-dot[data-status="syncing"] {
+      background: var(--blue);
+      box-shadow: 0 0 0 0 rgba(37, 97, 221, 0.34);
+      animation: traktPulse 1.4s ease-out infinite;
+    }
+
+    .queue-item-dot[data-status="pending"] {
+      background: var(--tertiary);
+    }
+
+    .queue-item-dot[data-status="synced"] {
+      background: #30d158;
+    }
+
+    .queue-item-title {
+      margin: 0;
+      min-width: 0;
+      flex: 1 1 auto;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .queue-item-time {
+      flex: 0 0 auto;
+      color: var(--secondary);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .queue-empty {
+      margin: 0;
+      color: var(--secondary);
+      font-size: 12px;
+    }
+
     .footer {
       margin: 8px 7px 0;
       padding: 10px 1px 0;
@@ -873,6 +945,17 @@
       </div>
     </section>
 
+    <section id="offline-queue-section" class="section" hidden>
+      <div class="section-head">
+        <p class="section-label">Offline Queue</p>
+        <span id="offline-queue-pill" class="status-pill" hidden></span>
+      </div>
+      <div class="section-body">
+        <div id="offline-queue-list" class="queue-list"></div>
+        <p id="offline-queue-empty" class="queue-empty" hidden>No offline scrobbles queued.</p>
+      </div>
+    </section>
+
     <footer id="bottom-actions" class="footer" hidden>
       <div class="footer-stack">
         <div id="footer-default" class="footer-panel" aria-hidden="false">
@@ -956,6 +1039,10 @@
           mediaLabel: "",
           mediaKey: "",
           results: []
+        },
+        offlineQueue: {
+          pending: [],
+          recentlySynced: []
         },
         app: {
           version: ""
@@ -1640,6 +1727,82 @@
         setHidden("history-empty", true);
       }
 
+      function renderOfflineQueue() {
+        var queue = state.offlineQueue || {};
+        var pending = Array.isArray(queue.pending) ? queue.pending : [];
+        var recentlySynced = Array.isArray(queue.recentlySynced) ? queue.recentlySynced : [];
+        var section = document.getElementById("offline-queue-section");
+        var list = document.getElementById("offline-queue-list");
+        var empty = document.getElementById("offline-queue-empty");
+        var pill = document.getElementById("offline-queue-pill");
+
+        if (!section || !list || !empty || !pill) return;
+
+        var hasPending = pending.length > 0;
+        var hasSynced = recentlySynced.length > 0;
+
+        section.hidden = !hasPending && !hasSynced;
+
+        if (!hasPending && !hasSynced) return;
+
+        var pendingCount = pending.filter(function(i) { return !i.syncing; }).length;
+        var syncingCount = pending.filter(function(i) { return i.syncing; }).length;
+        pill.textContent = String(pendingCount + syncingCount);
+        pill.hidden = (pendingCount + syncingCount) === 0;
+
+        list.textContent = "";
+
+        var syncingItems = pending.filter(function(i) { return i.syncing; });
+        var waitingItems = pending.filter(function(i) { return !i.syncing; });
+
+        function makeGroup(label, items, status) {
+          var group = document.createElement("div");
+          group.className = "queue-group";
+
+          var groupLabel = document.createElement("p");
+          groupLabel.className = "queue-group-label";
+          groupLabel.textContent = label;
+          group.appendChild(groupLabel);
+
+          items.forEach(function(item) {
+            var row = document.createElement("div");
+            row.className = "queue-item";
+
+            var dot = document.createElement("span");
+            dot.className = "queue-item-dot";
+            dot.dataset.status = status;
+
+            var title = document.createElement("p");
+            title.className = "queue-item-title";
+            title.textContent = item.label || item.id || "Unknown";
+
+            var time = document.createElement("span");
+            time.className = "queue-item-time";
+            var ts = status === "synced" ? item.syncedAt : item.queuedAt;
+            time.textContent = formatUpdatedAt(ts);
+
+            row.appendChild(dot);
+            row.appendChild(title);
+            row.appendChild(time);
+            group.appendChild(row);
+          });
+
+          return group;
+        }
+
+        if (syncingItems.length) {
+          list.appendChild(makeGroup("Syncing", syncingItems, "syncing"));
+        }
+        if (waitingItems.length) {
+          list.appendChild(makeGroup("Pending", waitingItems, "pending"));
+        }
+        if (recentlySynced.length) {
+          list.appendChild(makeGroup("Synced", recentlySynced, "synced"));
+        }
+
+        empty.hidden = hasPending || hasSynced;
+      }
+
       function renderProvider() {
         var version = state.app && state.app.version ? ("v" + state.app.version) : "";
         setText("provider-version", version);
@@ -1652,6 +1815,7 @@
         renderScrobble();
         renderCorrection();
         renderHistory();
+        renderOfflineQueue();
         renderProvider();
       }
 

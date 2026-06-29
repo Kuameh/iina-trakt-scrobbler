@@ -436,6 +436,25 @@ async function buildSidebarPayload(forceProfileRefresh) {
     });
   }
 
+  var queueStatus = offlineQueue.getStatus();
+  var offlineQueuePayload = {
+    pending: queueStatus.pending.map(function(item) {
+      return {
+        id: item.id,
+        label: mediaLabel(item.mediaInfo),
+        queuedAt: item.queuedAt,
+        syncing: item.id === queueStatus.activeSyncId
+      };
+    }),
+    recentlySynced: queueStatus.recentlySynced.map(function(item) {
+      return {
+        id: item.id,
+        label: mediaLabel(item.mediaInfo),
+        syncedAt: item.syncedAt
+      };
+    })
+  };
+
   return {
     app: {
       version: PLUGIN_VERSION
@@ -458,6 +477,7 @@ async function buildSidebarPayload(forceProfileRefresh) {
     scrobble: cloneScrobbleStatus(lastScrobbleStatus),
     correction: correction,
     history: recentHistory,
+    offlineQueue: offlineQueuePayload,
     generatedAt: new Date().toISOString()
   };
 }
