@@ -3,6 +3,7 @@ const { core, event, file, preferences, utils, sidebar, menu } = iina;
 var parser = require("./parser.iina.js");
 var monitor = require("./monitor.js");
 var trakt = require("./trakt.js");
+var offlineQueue = require("./offline-queue.js");
 var PLUGIN_VERSION = "0.1.36";
 var DEBUG_LOG_PATH = "@data/debug.log";
 var MAX_DEBUG_LOG_CHARS = 200000;
@@ -74,6 +75,19 @@ trakt.configure({
   },
   notify: function(message) {
     importantOsd(message);
+  }
+});
+
+offlineQueue.configure({
+  file: file,
+  log: function(message) { log(message); },
+  trakt: trakt,
+  mediaKey: monitor.mediaKey,
+  onReplaySuccess: function(verb, action, mediaInfo) {
+    maybeShowScrobbleStatusOsd(verb, action, mediaInfo);
+    if (action === "scrobble" && typeof trakt.clearRecentHistoryCache === "function") {
+      trakt.clearRecentHistoryCache();
+    }
   }
 });
 
@@ -422,6 +436,26 @@ async function buildSidebarPayload(forceProfileRefresh) {
     });
   }
 
+  var queueStatus = offlineQueue.getStatus();
+  var offlineQueuePayload = {
+    flushing: !!queueStatus.flushing,
+    pending: queueStatus.pending.map(function(item) {
+      return {
+        id: item.id,
+        label: mediaLabel(item.mediaInfo),
+        queuedAt: item.queuedAt,
+        syncing: item.id === queueStatus.activeSyncId
+      };
+    }),
+    recentlySynced: queueStatus.recentlySynced.map(function(item) {
+      return {
+        id: item.id,
+        label: mediaLabel(item.mediaInfo),
+        syncedAt: item.syncedAt
+      };
+    })
+  };
+
   return {
     app: {
       version: PLUGIN_VERSION
@@ -444,6 +478,7 @@ async function buildSidebarPayload(forceProfileRefresh) {
     scrobble: cloneScrobbleStatus(lastScrobbleStatus),
     correction: correction,
     history: recentHistory,
+    offlineQueue: offlineQueuePayload,
     generatedAt: new Date().toISOString()
   };
 }
@@ -588,6 +623,14 @@ function bindSidebarMessaging() {
   sidebar.onMessage("close_correction", function() {
     log("Sidebar requested correction close");
     resetCorrectionState();
+    queueSidebarRefresh(false);
+  });
+
+  sidebar.onMessage("flush_offline_queue", function() {
+    log("Sidebar requested offline queue flush");
+    offlineQueue.flushPendingScrobbles().catch(function(error) {
+      log("Sidebar-triggered offline flush failed: " + errStr(error));
+    });
     queueSidebarRefresh(false);
   });
 
@@ -1407,6 +1450,7 @@ function queueScrobble(verb, snapshot) {
           debugOsd("Scrobble flow active");
           firstScrobbleNoticeShown = true;
         }
+        offlineQueue.flushPendingScrobbles().catch(function(e) { log("Offline queue flush error: " + errStr(e)); });
         return;
       }
 
@@ -1478,6 +1522,9 @@ function queueScrobble(verb, snapshot) {
         progress: payload.progress
       });
       log("Scrobble failed for " + scrobbleTargetLabel(payload) + ": " + errStr(error));
+      if (offlineQueue.isNetworkError(error)) {
+        offlineQueue.addToPendingQueue(effectiveVerb, payload.mediaInfo, payload.progress);
+      }
       if (/Missing Trakt client credentials/.test(errStr(error)) && !missingCredentialsNoticeShown) {
         importantOsd("Configure Trakt app credentials for this build");
         missingCredentialsNoticeShown = true;
@@ -1750,6 +1797,7 @@ appendDebugLog("[IINATraktScrobbler] Session start");
 log("Plugin main loaded");
 appendDebugLog("[IINATraktScrobbler] Parser mode default=guessit-with-heuristic-fallback");
 persistAuthStatus();
+offlineQueue.flushPendingScrobbles().catch(function(e) { log("Offline queue startup flush error: " + errStr(e)); });
 registerMenuItems();
 ensurePollTimer();
 ensureUiPollTimer();
