@@ -125,19 +125,27 @@ async function run() {
     assert.strictEqual(q.isNetworkError(httpError(401)), false);
   });
 
-  // addToPendingQueue — verb filtering
-  await test("addToPendingQueue ignores start verb", function() {
+  // addToPendingQueue — verb handling
+  await test("addToPendingQueue accepts start verb", function() {
     const store = {};
     const q = loadFreshQueue(store);
     q.addToPendingQueue("start", movie, 10);
-    assert.deepStrictEqual(readQueue(store), []);
+    const items = readQueue(store);
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].verb, "start");
+    assert.strictEqual(items[0].progress, 10);
+    assert.deepStrictEqual(items[0].mediaInfo, movie);
   });
 
-  await test("addToPendingQueue ignores pause verb", function() {
+  await test("addToPendingQueue accepts pause verb", function() {
     const store = {};
     const q = loadFreshQueue(store);
     q.addToPendingQueue("pause", movie, 55);
-    assert.deepStrictEqual(readQueue(store), []);
+    const items = readQueue(store);
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].verb, "pause");
+    assert.strictEqual(items[0].progress, 55);
+    assert.deepStrictEqual(items[0].mediaInfo, movie);
   });
 
   await test("addToPendingQueue accepts stop verb", function() {
@@ -151,12 +159,29 @@ async function run() {
     assert.deepStrictEqual(items[0].mediaInfo, movie);
   });
 
+  await test("addToPendingQueue treats different verbs as separate entries", function() {
+    const store = {};
+    const q = loadFreshQueue(store);
+    q.addToPendingQueue("start", movie, 5);
+    q.addToPendingQueue("pause", movie, 5);
+    q.addToPendingQueue("stop", movie, 5);
+    assert.strictEqual(readQueue(store).length, 3);
+  });
+
   // addToPendingQueue — id and deduplication
   await test("addToPendingQueue deduplicates identical stop scrobbles", function() {
     const store = {};
     const q = loadFreshQueue(store);
     q.addToPendingQueue("stop", movie, 92);
     q.addToPendingQueue("stop", movie, 92);
+    assert.strictEqual(readQueue(store).length, 1);
+  });
+
+  await test("addToPendingQueue deduplicates identical start scrobbles", function() {
+    const store = {};
+    const q = loadFreshQueue(store);
+    q.addToPendingQueue("start", movie, 10);
+    q.addToPendingQueue("start", movie, 10);
     assert.strictEqual(readQueue(store).length, 1);
   });
 

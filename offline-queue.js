@@ -73,17 +73,16 @@ function addToSyncedScrobbles(id, mediaInfo) {
   saveSyncedScrobbles(items);
 }
 
-function pendingQueueId(mediaInfo, progress) {
+function pendingQueueId(verb, mediaInfo, progress) {
   return [
-    "stop",
+    verb,
     runtime.mediaKey(mediaInfo),
     String(Math.round(Number(progress || 0) * 100) / 100)
   ].join("|");
 }
 
 function addToPendingQueue(verb, mediaInfo, progress) {
-  if (verb !== "stop") return;
-  var id = pendingQueueId(mediaInfo, progress);
+  var id = pendingQueueId(verb, mediaInfo, progress);
   var items = loadPendingScrobbles();
   if (items.some(function(item) { return item.id === id; })) return;
   if (items.length >= MAX_PENDING_SCROBBLES) {
@@ -91,7 +90,7 @@ function addToPendingQueue(verb, mediaInfo, progress) {
   }
   items.push({
     id: id,
-    verb: "stop",
+    verb: verb,
     mediaInfo: mediaInfo,
     progress: Number(progress || 0),
     queuedAt: new Date().toISOString()
